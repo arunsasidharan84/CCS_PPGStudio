@@ -32,17 +32,64 @@ class PoincareChart extends StatelessWidget {
           decoration: BoxDecoration(
             color: SensioTheme.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: SensioTheme.border.withValues(alpha: 0.4)),
+            border: Border.all(
+              color: SensioTheme.border.withValues(alpha: 0.4),
+            ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _metricChip('Mean RR', '${data.meanRr.toStringAsFixed(1)} ms'),
-              _metricChip('SD1 (short-term)', '${data.sd1.toStringAsFixed(1)} ms'),
-              _metricChip('SD2 (long-term)', '${data.sd2.toStringAsFixed(1)} ms'),
-              _metricChip('SD1/SD2', (data.sd2 > 0 ? (data.sd1 / data.sd2).toStringAsFixed(3) : '-')),
-              _metricChip('Total Beats', '${data.x.length}'),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 650;
+              final isShort = MediaQuery.sizeOf(context).height < 500;
+              final chips = [
+                _metricChip('Mean RR', '${data.meanRr.toStringAsFixed(1)} ms'),
+                _metricChip(
+                  isNarrow ? 'SD1 (vagal)' : 'SD1 (short-term)',
+                  '${data.sd1.toStringAsFixed(1)} ms',
+                ),
+                _metricChip(
+                  isNarrow ? 'SD2 (total)' : 'SD2 (long-term)',
+                  '${data.sd2.toStringAsFixed(1)} ms',
+                ),
+                _metricChip(
+                  'SD1/SD2',
+                  (data.sd2 > 0
+                      ? (data.sd1 / data.sd2).toStringAsFixed(3)
+                      : '-'),
+                ),
+                _metricChip(
+                  isNarrow ? 'Beats' : 'Total Beats',
+                  '${data.x.length}',
+                ),
+              ];
+
+              if (isShort) {
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: chips
+                        .map(
+                          (chip) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: chip,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                );
+              }
+
+              return isNarrow
+                  ? Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.spaceAround,
+                      children: chips,
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: chips,
+                    );
+            },
           ),
         ),
         const SizedBox(height: 12),
@@ -53,7 +100,9 @@ class PoincareChart extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFF090D16),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: SensioTheme.border.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: SensioTheme.border.withValues(alpha: 0.4),
+              ),
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -98,8 +147,11 @@ class PoincareChart extends StatelessWidget {
       final px = ((data.x[i] - minVal) / range) * size.width;
       final py = size.height - ((data.y[i] - minVal) / range) * size.height;
 
-      final dist = (localPos.dx - px) * (localPos.dx - px) + (localPos.dy - py) * (localPos.dy - py);
-      if (dist < minDistance && dist < 400.0) { // Within 20px
+      final dist =
+          (localPos.dx - px) * (localPos.dx - px) +
+          (localPos.dy - py) * (localPos.dy - py);
+      if (dist < minDistance && dist < 400.0) {
+        // Within 20px
         minDistance = dist;
         nearestIdx = i;
       }
@@ -180,7 +232,8 @@ class _PoincarePainter extends CustomPainter {
       final ellipsePath = Path();
       for (int i = 0; i < data.ellipseX.length; i++) {
         final x = ((data.ellipseX[i] - minVal) / range) * size.width;
-        final y = size.height - ((data.ellipseY[i] - minVal) / range) * size.height;
+        final y =
+            size.height - ((data.ellipseY[i] - minVal) / range) * size.height;
 
         if (i == 0) {
           ellipsePath.moveTo(x, y);

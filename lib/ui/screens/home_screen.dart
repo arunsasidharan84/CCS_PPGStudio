@@ -21,7 +21,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   String? _selectedPpgPath;
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   double? _analysisWindowStartS;
   double? _analysisWindowEndS;
   FilteredWindowStats? _windowStats;
+  int _hrvSubTab = 0; // 0: Poincaré Plot, 1: 15s Epoch Trends (mobile portrait)
 
   @override
   void initState() {
@@ -59,13 +61,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         } catch (_) {}
       }
 
-      final res = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
+      FilePickerResult? res;
+      try {
+        // Android document providers do not consistently advertise CSV MIME types.
+        // Let the system picker show all documents there and validate the suffix
+        // after selection. Other platforms retain the more focused CSV filter.
+        res = await FilePicker.pickFiles(
+          type: Platform.isAndroid ? FileType.any : FileType.custom,
+          allowedExtensions: Platform.isAndroid ? null : const ['csv'],
+        );
+      } catch (_) {
+        res = await FilePicker.pickFiles(type: FileType.any);
+      }
 
       if (res != null && res.files.isNotEmpty && res.files.first.path != null) {
         final ppgPath = res.files.first.path!;
+        if (!ppgPath.toLowerCase().endsWith('.csv')) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please select a CSV recording.')),
+            );
+          }
+          return;
+        }
         final sigmotPath = PPGAnalysisService.findMatchingSigmot(ppgPath);
         setState(() {
           _selectedPpgPath = ppgPath;
@@ -76,7 +94,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error opening file picker: $e\n\nYou can also enter the absolute path directly.';
+        _errorMessage =
+            'Error opening file picker: $e\n\nYou can also enter the absolute path directly.';
       });
     }
   }
@@ -87,7 +106,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: SensioTheme.surface,
-        title: const Text('Open PPG Recording by Path', style: TextStyle(color: Colors.white, fontSize: 16)),
+        title: const Text(
+          'Open PPG Recording by Path',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -99,7 +121,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
               decoration: const InputDecoration(
                 hintText: '/path/to/session_ppg_data.csv',
                 hintStyle: TextStyle(color: Colors.white38),
@@ -113,17 +139,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white60),
+            ),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: SensioTheme.accent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: SensioTheme.accent,
+            ),
             onPressed: () {
               final path = controller.text.trim();
               Navigator.pop(ctx);
               if (path.isNotEmpty) {
                 final file = File(path);
                 if (file.existsSync()) {
-                  final sigmotPath = PPGAnalysisService.findMatchingSigmot(path);
+                  final sigmotPath = PPGAnalysisService.findMatchingSigmot(
+                    path,
+                  );
                   setState(() {
                     _selectedPpgPath = path;
                     _detectedSigmotPath = sigmotPath;
@@ -137,7 +170,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 }
               }
             },
-            child: const Text('Load & Analyze', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Load & Analyze',
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -159,7 +198,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ? CsvExportService.generateTimeSeriesCsv(_analysisResult!)
           : CsvExportService.generateSummaryCsv(_analysisResult!);
 
-      final fallbackDir = _selectedPpgPath?.substring(0, _selectedPpgPath!.lastIndexOf('/'));
+      final fallbackDir = _selectedPpgPath?.substring(
+        0,
+        _selectedPpgPath!.lastIndexOf('/'),
+      );
 
       final saved = await CsvExportService.saveCsv(
         defaultFileName: defaultFileName,
@@ -173,7 +215,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             backgroundColor: SensioTheme.accent,
             content: Text(
               'Exported: $saved',
-              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         );
@@ -226,11 +271,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       _analysisWindowStartS = startS;
       _analysisWindowEndS = endS;
-      final isFull = startS <= 0.5 && endS >= (_analysisResult!.totalDurationS - 0.5);
+      final isFull =
+          startS <= 0.5 && endS >= (_analysisResult!.totalDurationS - 0.5);
       if (isFull) {
         _windowStats = null;
       } else {
-        _windowStats = WindowAnalysisService.computeSubWindow(_analysisResult!, startS, endS);
+        _windowStats = WindowAnalysisService.computeSubWindow(
+          _analysisResult!,
+          startS,
+          endS,
+        );
       }
     });
   }
@@ -249,7 +299,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       _currentStartS = newStartS.clamp(
         0.0,
-        (_analysisResult!.totalDurationS - _windowDurationS).clamp(0.0, _analysisResult!.totalDurationS),
+        (_analysisResult!.totalDurationS - _windowDurationS).clamp(
+          0.0,
+          _analysisResult!.totalDurationS,
+        ),
       );
     });
   }
@@ -259,7 +312,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       _currentStartS = (ts - _windowDurationS / 2.0).clamp(
         0.0,
-        (_analysisResult!.totalDurationS - _windowDurationS).clamp(0.0, _analysisResult!.totalDurationS),
+        (_analysisResult!.totalDurationS - _windowDurationS).clamp(
+          0.0,
+          _analysisResult!.totalDurationS,
+        ),
       );
       _tabController.animateTo(0); // Jump to Waveform tab for individual beat
     });
@@ -270,7 +326,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       _currentStartS = (ts - _windowDurationS / 2.0).clamp(
         0.0,
-        (_analysisResult!.totalDurationS - _windowDurationS).clamp(0.0, _analysisResult!.totalDurationS),
+        (_analysisResult!.totalDurationS - _windowDurationS).clamp(
+          0.0,
+          _analysisResult!.totalDurationS,
+        ),
       );
       // Stay on HRV Dynamics tab while inspecting
     });
@@ -281,7 +340,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       _currentStartS = (ts - _windowDurationS / 2.0).clamp(
         0.0,
-        (_analysisResult!.totalDurationS - _windowDurationS).clamp(0.0, _analysisResult!.totalDurationS),
+        (_analysisResult!.totalDurationS - _windowDurationS).clamp(
+          0.0,
+          _analysisResult!.totalDurationS,
+        ),
       );
       _tabController.animateTo(0); // Explicitly requested tab jump
     });
@@ -289,9 +351,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final isPhone = size.shortestSide < 600;
+    final useCompactAppBar = isPhone;
+    final isPhoneLandscape = isPhone && size.width > size.height;
+
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: isPhoneLandscape ? 44 : kToolbarHeight,
+        titleSpacing: 12,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(6),
@@ -299,60 +369,133 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 color: SensioTheme.accent.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.monitor_heart, color: SensioTheme.accent, size: 22),
+              child: const Icon(
+                Icons.monitor_heart,
+                color: SensioTheme.accent,
+                size: 20,
+              ),
             ),
-            const SizedBox(width: 12),
-            const Text('Sensio PPG Analysis Studio', style: TextStyle(fontWeight: FontWeight.bold)),
-            const Spacer(),
-            if (_analysisResult != null) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                useCompactAppBar
+                    ? 'CCS PPGStudio'
+                    : 'Sensio PPG Analysis Studio',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: useCompactAppBar ? 15 : 18,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (_analysisResult != null) ...[
+            if (useCompactAppBar) ...[
+              // Compact Clock/Elapsed toggle icon button for mobile
+              IconButton(
+                icon: Icon(
+                  _showClockTime ? Icons.access_time : Icons.timer_outlined,
+                  color: SensioTheme.accent,
+                  size: 20,
+                ),
+                tooltip: _showClockTime
+                    ? 'Clock Time (Tap for Elapsed)'
+                    : 'Elapsed Time (Tap for Clock)',
+                onPressed: () =>
+                    setState(() => _showClockTime = !_showClockTime),
+              ),
+            ] else ...[
+              // Desktop Segmented Toggle
               Container(
                 decoration: BoxDecoration(
                   color: SensioTheme.surface,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: SensioTheme.border.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: SensioTheme.border.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     InkWell(
-                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(7)),
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(7),
+                      ),
                       onTap: () => setState(() => _showClockTime = false),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        color: !_showClockTime ? SensioTheme.accent.withValues(alpha: 0.2) : Colors.transparent,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        color: !_showClockTime
+                            ? SensioTheme.accent.withValues(alpha: 0.2)
+                            : Colors.transparent,
                         child: Row(
                           children: [
-                            Icon(Icons.timer_outlined, size: 14, color: !_showClockTime ? SensioTheme.accent : Colors.white60),
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 14,
+                              color: !_showClockTime
+                                  ? SensioTheme.accent
+                                  : Colors.white60,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Elapsed',
                               style: TextStyle(
                                 fontSize: 11,
-                                fontWeight: !_showClockTime ? FontWeight.bold : FontWeight.normal,
-                                color: !_showClockTime ? SensioTheme.accent : Colors.white60,
+                                fontWeight: !_showClockTime
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: !_showClockTime
+                                    ? SensioTheme.accent
+                                    : Colors.white60,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                    Container(width: 1, height: 20, color: SensioTheme.border.withValues(alpha: 0.4)),
+                    Container(
+                      width: 1,
+                      height: 20,
+                      color: SensioTheme.border.withValues(alpha: 0.4),
+                    ),
                     InkWell(
-                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(7),
+                      ),
                       onTap: () => setState(() => _showClockTime = true),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        color: _showClockTime ? SensioTheme.accent.withValues(alpha: 0.2) : Colors.transparent,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        color: _showClockTime
+                            ? SensioTheme.accent.withValues(alpha: 0.2)
+                            : Colors.transparent,
                         child: Row(
                           children: [
-                            Icon(Icons.access_time, size: 14, color: _showClockTime ? SensioTheme.accent : Colors.white60),
+                            Icon(
+                              Icons.access_time,
+                              size: 14,
+                              color: _showClockTime
+                                  ? SensioTheme.accent
+                                  : Colors.white60,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Clock Time',
                               style: TextStyle(
                                 fontSize: 11,
-                                fontWeight: _showClockTime ? FontWeight.bold : FontWeight.normal,
-                                color: _showClockTime ? SensioTheme.accent : Colors.white60,
+                                fontWeight: _showClockTime
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: _showClockTime
+                                    ? SensioTheme.accent
+                                    : Colors.white60,
                               ),
                             ),
                           ],
@@ -362,14 +505,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
             ],
+          ],
+
+          // Dedicated File Open Button (ALWAYS visible and tappable!)
+          if (useCompactAppBar) ...[
+            IconButton(
+              icon: const Icon(
+                Icons.folder_open,
+                color: SensioTheme.accent,
+                size: 22,
+              ),
+              tooltip: 'Open PPG CSV Recording',
+              onPressed: _pickFile,
+            ),
+          ] else ...[
             if (_selectedPpgPath != null) ...[
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white70,
                   side: const BorderSide(color: SensioTheme.border),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 icon: const Icon(Icons.folder_open, size: 16),
                 label: Text(
@@ -379,92 +539,142 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 onPressed: _pickFile,
               ),
               const SizedBox(width: 8),
-              if (_analysisResult != null)
-                PopupMenuButton<String>(
-                  tooltip: 'Export CSV Results',
-                  color: SensioTheme.surface,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: SensioTheme.accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: SensioTheme.accent.withValues(alpha: 0.4)),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.download, size: 15, color: SensioTheme.accent),
-                        SizedBox(width: 4),
-                        Text(
-                          'Export CSV',
-                          style: TextStyle(
+            ],
+          ],
+
+          // Export CSV Button
+          if (_analysisResult != null)
+            PopupMenuButton<String>(
+              tooltip: 'Export CSV Results',
+              color: SensioTheme.surface,
+              icon: useCompactAppBar
+                  ? const Icon(
+                      Icons.download,
+                      color: SensioTheme.accent,
+                      size: 20,
+                    )
+                  : null,
+              child: useCompactAppBar
+                  ? null
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: SensioTheme.accent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: SensioTheme.accent.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.download,
+                            size: 15,
                             color: SensioTheme.accent,
-                            fontSize: 12,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Export CSV',
+                            style: TextStyle(
+                              color: SensioTheme.accent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'timeseries',
+                  child: Row(
+                    children: [
+                      Icon(Icons.timeline, size: 16, color: SensioTheme.accent),
+                      SizedBox(width: 8),
+                      Text(
+                        'Export Time-Series CSV (*.features.csv)',
+                        style: TextStyle(fontSize: 12, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'summary',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.table_chart,
+                        size: 16,
+                        color: SensioTheme.ppgSignal,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Export Summary Stats CSV (*.summary.csv)',
+                        style: TextStyle(fontSize: 12, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'copy',
+                  child: Row(
+                    children: [
+                      Icon(Icons.copy, size: 16, color: Colors.white70),
+                      SizedBox(width: 8),
+                      Text(
+                        'Copy Time-Series to Clipboard',
+                        style: TextStyle(fontSize: 12, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              onSelected: (val) async {
+                final messenger = ScaffoldMessenger.of(context);
+                if (val == 'timeseries') {
+                  await _quickExportCsv(isTimeSeries: true);
+                } else if (val == 'summary') {
+                  await _quickExportCsv(isTimeSeries: false);
+                } else if (val == 'copy') {
+                  final csv = CsvExportService.generateTimeSeriesCsv(
+                    _analysisResult!,
+                  );
+                  await CsvExportService.copyToClipboard(csv);
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        backgroundColor: SensioTheme.accent,
+                        content: Text(
+                          'Time-series CSV copied to clipboard!',
+                          style: TextStyle(
+                            color: Colors.black,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  itemBuilder: (ctx) => [
-                    const PopupMenuItem(
-                      value: 'timeseries',
-                      child: Row(
-                        children: [
-                          Icon(Icons.timeline, size: 16, color: SensioTheme.accent),
-                          SizedBox(width: 8),
-                          Text('Export Time-Series CSV (*.features.csv)', style: TextStyle(fontSize: 12, color: Colors.white)),
-                        ],
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'summary',
-                      child: Row(
-                        children: [
-                          Icon(Icons.table_chart, size: 16, color: SensioTheme.ppgSignal),
-                          SizedBox(width: 8),
-                          Text('Export Summary Stats CSV (*.summary.csv)', style: TextStyle(fontSize: 12, color: Colors.white)),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'copy',
-                      child: Row(
-                        children: [
-                          Icon(Icons.copy, size: 16, color: Colors.white70),
-                          SizedBox(width: 8),
-                          Text('Copy Time-Series to Clipboard', style: TextStyle(fontSize: 12, color: Colors.white)),
-                        ],
-                      ),
-                    ),
-                  ],
-                  onSelected: (val) async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    if (val == 'timeseries') {
-                      await _quickExportCsv(isTimeSeries: true);
-                    } else if (val == 'summary') {
-                      await _quickExportCsv(isTimeSeries: false);
-                    } else if (val == 'copy') {
-                      final csv = CsvExportService.generateTimeSeriesCsv(_analysisResult!);
-                      await CsvExportService.copyToClipboard(csv);
-                      if (mounted) {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            backgroundColor: SensioTheme.accent,
-                            content: Text(
-                              'Time-series CSV copied to clipboard!',
-                              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
-            ],
-          ],
-        ),
+                    );
+                  }
+                }
+              },
+            ),
+          const SizedBox(width: 6),
+        ],
       ),
+      floatingActionButton: (_selectedPpgPath == null || isPhone)
+          ? FloatingActionButton.extended(
+              backgroundColor: SensioTheme.accent,
+              foregroundColor: Colors.black,
+              icon: const Icon(Icons.folder_open),
+              label: Text(
+                _selectedPpgPath == null ? 'Load PPG CSV' : 'Open CSV',
+              ),
+              onPressed: _pickFile,
+            )
+          : null,
       body: _buildBody(),
     );
   }
@@ -477,8 +687,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             CircularProgressIndicator(color: SensioTheme.accent),
             SizedBox(height: 16),
-            Text('Processing high-efficiency Rust DSP & HRV Engine...',
-                style: TextStyle(color: Colors.white70, fontSize: 14)),
+            Text(
+              'Processing high-efficiency Rust DSP & HRV Engine...',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
           ],
         ),
       );
@@ -497,22 +709,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, color: SensioTheme.badArtifact, size: 40),
+              const Icon(
+                Icons.error_outline,
+                color: SensioTheme.badArtifact,
+                size: 40,
+              ),
               const SizedBox(height: 12),
-              Text(_errorMessage!,
-                  style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: SensioTheme.accent),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: SensioTheme.accent,
+                    ),
                     onPressed: _pickFile,
-                    child: const Text('Select Another File', style: TextStyle(color: Colors.black)),
+                    child: const Text(
+                      'Select Another File',
+                      style: TextStyle(color: Colors.black),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   OutlinedButton(
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white70),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                    ),
                     onPressed: _showManualPathDialog,
                     child: const Text('Enter Path Directly'),
                   ),
@@ -529,13 +755,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.insights, size: 64, color: SensioTheme.border.withValues(alpha: 0.6)),
+            Icon(
+              Icons.insights,
+              size: 64,
+              color: SensioTheme.border.withValues(alpha: 0.6),
+            ),
             const SizedBox(height: 16),
-            const Text('No PPG Session Loaded',
-                style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'No PPG Session Loaded',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 8),
-            const Text('Select a Ring PPG CSV recording to compute high-precision HRV & morphology',
-                style: TextStyle(color: Colors.white38, fontSize: 13)),
+            const Text(
+              'Select a Ring PPG CSV recording to compute high-precision HRV & morphology',
+              style: TextStyle(color: Colors.white38, fontSize: 13),
+            ),
             const SizedBox(height: 24),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -544,10 +782,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   style: ElevatedButton.styleFrom(
                     backgroundColor: SensioTheme.accent,
                     foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                   ),
                   icon: const Icon(Icons.folder_open),
-                  label: const Text('Select CSV File', style: TextStyle(fontWeight: FontWeight.bold)),
+                  label: const Text(
+                    'Select CSV File',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   onPressed: _pickFile,
                 ),
                 const SizedBox(width: 12),
@@ -555,7 +799,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white70,
                     side: const BorderSide(color: SensioTheme.border),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                   icon: const Icon(Icons.edit_note, size: 18),
                   label: const Text('Enter Path Directly'),
@@ -568,6 +815,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
     }
 
+    final size = MediaQuery.sizeOf(context);
+    final compactLandscape =
+        size.shortestSide < 600 && size.width > size.height;
+
     return Column(
       children: [
         // KPI Quick Summary Bar
@@ -576,16 +827,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         // Tab Navigation
         TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           tabs: [
-            const Tab(icon: Icon(Icons.show_chart, size: 18), text: 'Waveform & Timeline'),
-            const Tab(icon: Icon(Icons.scatter_plot, size: 18), text: 'HRV Dynamics & Poincaré'),
             Tab(
-              icon: const Icon(Icons.table_chart, size: 18),
-              text: _windowStats != null
-                  ? 'Clinical Summary (${_windowStats!.summary.length} Features • Window)'
-                  : 'Clinical Summary (${_analysisResult?.summary.length ?? 28} Features)',
+              icon: compactLandscape
+                  ? null
+                  : const Icon(Icons.show_chart, size: 18),
+              text: 'Waveform',
             ),
-            const Tab(icon: Icon(Icons.dataset_outlined, size: 18), text: 'CSV Data Explorer'),
+            Tab(
+              icon: compactLandscape
+                  ? null
+                  : const Icon(Icons.scatter_plot, size: 18),
+              text: 'HRV Dynamics',
+            ),
+            Tab(
+              icon: compactLandscape
+                  ? null
+                  : const Icon(Icons.table_chart, size: 18),
+              text: _windowStats != null
+                  ? 'Clinical Summary (Window)'
+                  : 'Clinical Summary',
+            ),
+            Tab(
+              icon: compactLandscape
+                  ? null
+                  : const Icon(Icons.dataset_outlined, size: 18),
+              text: 'CSV Explorer',
+            ),
           ],
         ),
 
@@ -622,7 +893,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final actMotion = summary['Activity_Motion']?.mean ?? double.nan;
 
     final dateLabel = TimeFormatter.formatSessionDate(res.sessionStartDateTime);
-    final spanLabel = TimeFormatter.formatSessionSpan(res.sessionStartDateTime, res.totalDurationS);
+    final spanLabel = TimeFormatter.formatSessionSpan(
+      res.sessionStartDateTime,
+      res.totalDurationS,
+    );
+    final sessionStartLabel = TimeFormatter.formatSeconds(
+      0,
+      clockTime: res.sessionStartDateTime != null,
+      sessionStart: res.sessionStartDateTime,
+      t0SecondsOfDay: res.startTimeOfDayS,
+      includeDate: false,
+    );
+    final sessionEndLabel = TimeFormatter.formatSeconds(
+      res.totalDurationS,
+      clockTime: res.sessionStartDateTime != null,
+      sessionStart: res.sessionStartDateTime,
+      t0SecondsOfDay: res.startTimeOfDayS,
+      includeDate: false,
+    );
+    final sessionDurationHours = res.totalDurationS / 3600;
+    final sessionDurationText = sessionDurationHours >= 1
+        ? '${sessionDurationHours.toStringAsFixed(1)}h'
+        : '${(res.totalDurationS / 60).round()}m';
 
     final windowStartLabel = TimeFormatter.formatSeconds(
       _analysisWindowStartS ?? 0.0,
@@ -638,26 +930,66 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       t0SecondsOfDay: res.startTimeOfDayS,
       includeDate: false,
     );
-    final winDurS = ((_analysisWindowEndS ?? res.totalDurationS) - (_analysisWindowStartS ?? 0.0)).clamp(0.0, res.totalDurationS);
+    final winDurS =
+        ((_analysisWindowEndS ?? res.totalDurationS) -
+                (_analysisWindowStartS ?? 0.0))
+            .clamp(0.0, res.totalDurationS);
     final winDurHours = winDurS / 3600.0;
-    final winDurText = winDurHours >= 1.0 ? '${winDurHours.toStringAsFixed(1)}h' : '${(winDurS / 60.0).round()}m';
+    final winDurText = winDurHours >= 1.0
+        ? '${winDurHours.toStringAsFixed(1)}h'
+        : '${(winDurS / 60.0).round()}m';
 
     final kpiWidgets = [
-      _kpiItem(isWindowActive ? 'Window Coverage' : 'Pulse Coverage', '${coverage.toStringAsFixed(1)}%', SensioTheme.goodPulse),
-      _kpiItem(isWindowActive ? 'Window Beats' : 'Detected Beats', '$beats', SensioTheme.accent),
-      _kpiItem('Mean HR', meanHr.isFinite ? '${meanHr.toStringAsFixed(1)} BPM' : '-', Colors.white),
-      _kpiItem('Mean SDNN', sdnn.isFinite ? '${sdnn.toStringAsFixed(1)} ms' : '-', SensioTheme.ppgSignal),
-      _kpiItem('Mean RMSSD', rmssd.isFinite ? '${rmssd.toStringAsFixed(1)} ms' : '-', SensioTheme.accent),
+      _kpiItem(
+        isWindowActive ? 'Window Coverage' : 'Pulse Coverage',
+        '${coverage.toStringAsFixed(1)}%',
+        SensioTheme.goodPulse,
+      ),
+      _kpiItem(
+        isWindowActive ? 'Window Beats' : 'Detected Beats',
+        '$beats',
+        SensioTheme.accent,
+      ),
+      _kpiItem(
+        'Mean HR',
+        meanHr.isFinite ? '${meanHr.toStringAsFixed(1)} BPM' : '-',
+        Colors.white,
+      ),
+      _kpiItem(
+        'Mean SDNN',
+        sdnn.isFinite ? '${sdnn.toStringAsFixed(1)} ms' : '-',
+        SensioTheme.ppgSignal,
+      ),
+      _kpiItem(
+        'Mean RMSSD',
+        rmssd.isFinite ? '${rmssd.toStringAsFixed(1)} ms' : '-',
+        SensioTheme.accent,
+      ),
       if (skinTemp.isFinite)
-        _kpiItem('Skin Temp', '${skinTemp.toStringAsFixed(2)} °C', const Color(0xFF38BDF8)),
+        _kpiItem(
+          'Skin Temp',
+          '${skinTemp.toStringAsFixed(2)} °C',
+          const Color(0xFF38BDF8),
+        ),
       if (actMotion.isFinite)
-        _kpiItem('Mean Activity', actMotion.toStringAsFixed(1), SensioTheme.sigmotSignal),
-      _kpiItem('Morphology Quality', mqi.isFinite ? mqi.toStringAsFixed(2) : '-', const Color(0xFFF472B6)),
+        _kpiItem(
+          'Mean Activity',
+          actMotion.toStringAsFixed(1),
+          SensioTheme.sigmotSignal,
+        ),
+      _kpiItem(
+        'Morphology Quality',
+        mqi.isFinite ? mqi.toStringAsFixed(2) : '-',
+        const Color(0xFFF472B6),
+      ),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 800;
+        final size = MediaQuery.sizeOf(context);
+        final compactLandscape =
+            size.shortestSide < 600 && size.width > size.height;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -669,33 +1001,109 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               decoration: BoxDecoration(
                 color: SensioTheme.surface.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: SensioTheme.border.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: SensioTheme.border.withValues(alpha: 0.3),
+                ),
               ),
-              child: isNarrow
-                  ? Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+              child: isNarrow && !compactLandscape
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.calendar_today, size: 14, color: SensioTheme.accent),
-                            const SizedBox(width: 6),
-                            Text(
-                              dateLabel,
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 13,
+                              color: SensioTheme.accent,
                             ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                dateLabel,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            if (isWindowActive) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: SensioTheme.accent.withValues(
+                                    alpha: 0.2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: SensioTheme.accent.withValues(
+                                      alpha: 0.6,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.filter_alt,
+                                      size: 10,
+                                      color: SensioTheme.accent,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Win: $winDurText',
+                                      style: const TextStyle(
+                                        color: SensioTheme.accent,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      onTap: _onResetAnalysisWindow,
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 11,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ] else
+                              Text(
+                                'Duration $sessionDurationText',
+                                style: const TextStyle(
+                                  color: SensioTheme.accent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                           ],
                         ),
+                        const SizedBox(height: 3),
                         Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.schedule, size: 14, color: Colors.white54),
-                            const SizedBox(width: 6),
-                            Text(
-                              spanLabel,
-                              style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'monospace'),
+                            const Icon(
+                              Icons.schedule,
+                              size: 13,
+                              color: Colors.white54,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                '$sessionStartLabel  →  $sessionEndLabel',
+                                maxLines: 2,
+                                softWrap: true,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -703,44 +1111,80 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     )
                   : Row(
                       children: [
-                        const Icon(Icons.calendar_today, size: 15, color: SensioTheme.accent),
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 15,
+                          color: SensioTheme.accent,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           dateLabel,
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(width: 16),
-                        const Icon(Icons.schedule, size: 15, color: Colors.white54),
+                        const Icon(
+                          Icons.schedule,
+                          size: 15,
+                          color: Colors.white54,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             spanLabel,
-                            style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'monospace'),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontFamily: 'monospace',
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (isWindowActive) ...[
                           const SizedBox(width: 12),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: SensioTheme.accent.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: SensioTheme.accent.withValues(alpha: 0.6)),
+                              border: Border.all(
+                                color: SensioTheme.accent.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.filter_alt, size: 12, color: SensioTheme.accent),
+                                const Icon(
+                                  Icons.filter_alt,
+                                  size: 12,
+                                  color: SensioTheme.accent,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Window: $windowStartLabel → $windowEndLabel ($winDurText)',
-                                  style: const TextStyle(color: SensioTheme.accent, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                                  style: const TextStyle(
+                                    color: SensioTheme.accent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'monospace',
+                                  ),
                                 ),
                                 const SizedBox(width: 6),
                                 InkWell(
                                   onTap: _onResetAnalysisWindow,
-                                  child: const Icon(Icons.close, size: 12, color: Colors.white70),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 12,
+                                    color: Colors.white70,
+                                  ),
                                 ),
                               ],
                             ),
@@ -757,9 +1201,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               decoration: BoxDecoration(
                 color: SensioTheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: SensioTheme.border.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: SensioTheme.border.withValues(alpha: 0.3),
+                ),
               ),
-              child: isNarrow
+              child: isNarrow && !compactLandscape
                   ? Wrap(
                       spacing: 16,
                       runSpacing: 8,
@@ -773,7 +1219,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         children: kpiWidgets
                             .map(
                               (w) => Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                ),
                                 child: w,
                               ),
                             )
@@ -791,16 +1239,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
         const SizedBox(height: 2),
-        Text(val, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold)),
+        Text(
+          val,
+          style: TextStyle(
+            color: color,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildWaveformTab() {
     final res = _analysisResult!;
-    final t0 = res.startTimeOfDayS > 0 ? res.startTimeOfDayS : (res.time.isNotEmpty ? res.time.first : 0.0);
+    final t0 = res.startTimeOfDayS > 0
+        ? res.startTimeOfDayS
+        : (res.time.isNotEmpty ? res.time.first : 0.0);
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -809,31 +1269,51 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           // Gapless Quality Strip Header & Ribbon
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'GAPLESS QUALITY EPISODES (Click to Jump)',
-                style: TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold),
+              const Expanded(
+                child: Text(
+                  'GAPLESS QUALITY EPISODES',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
+              const SizedBox(width: 6),
               // Zoom Level Presets
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Zoom: ', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  const Text(
+                    'Zoom: ',
+                    style: TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
                   ...[15.0, 30.0, 60.0, 120.0, 300.0].map((dur) {
-                    final label = dur >= 60.0 ? '${(dur / 60).round()}m' : '${dur.round()}s';
+                    final label = dur >= 60.0
+                        ? '${(dur / 60).round()}m'
+                        : '${dur.round()}s';
                     final isSel = _windowDurationS == dur;
                     return Padding(
                       padding: const EdgeInsets.only(left: 4),
-                       child: InkWell(
+                      child: InkWell(
                         borderRadius: BorderRadius.circular(4),
                         onTap: () => setState(() => _windowDurationS = dur),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSel ? SensioTheme.accent : Colors.transparent,
+                            color: isSel
+                                ? SensioTheme.accent
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: isSel ? SensioTheme.accent : SensioTheme.border.withValues(alpha: 0.4),
+                              color: isSel
+                                  ? SensioTheme.accent
+                                  : SensioTheme.border.withValues(alpha: 0.4),
                             ),
                           ),
                           child: Text(
@@ -841,7 +1321,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             style: TextStyle(
                               color: isSel ? Colors.black : Colors.white70,
                               fontSize: 10,
-                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSel
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -890,62 +1372,79 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildHrvDynamicsTab() {
     final res = _analysisResult!;
-    final t0 = res.startTimeOfDayS > 0 ? res.startTimeOfDayS : (res.time.isNotEmpty ? res.time.first : 0.0);
+    final t0 = res.startTimeOfDayS > 0
+        ? res.startTimeOfDayS
+        : (res.time.isNotEmpty ? res.time.first : 0.0);
     final poincareData = _windowStats?.poincare ?? res.poincare;
 
     return Padding(
       padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 850;
+          final isPhonePortrait =
+              constraints.maxWidth < 600 &&
+              constraints.maxHeight >= constraints.maxWidth;
+          final isLandscape =
+              constraints.maxHeight < 500 &&
+              constraints.maxWidth > constraints.maxHeight;
+          final isWide = constraints.maxWidth > 850 || isLandscape;
+
+          Widget poincare() => PoincareChart(
+            data: poincareData,
+            onSelectBeatTimestamp: _onSelectBeatTimestamp,
+          );
+
+          Widget trends() => HrvTrendsChart(
+            hrvResult: res.hrv,
+            onSelectTimestamp: _onSyncWaveformFromTrend,
+            onJumpToWaveform: _onJumpToWaveform,
+            showClockTime: _showClockTime,
+            t0SecondsOfDay: t0,
+            sessionStart: res.sessionStartDateTime,
+          );
+
+          if (isPhonePortrait) {
+            return Column(
+              children: [
+                SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 0,
+                      icon: Icon(Icons.scatter_plot, size: 16),
+                      label: Text('Poincaré Plot'),
+                    ),
+                    ButtonSegment(
+                      value: 1,
+                      icon: Icon(Icons.timeline, size: 16),
+                      label: Text('HRV Trends'),
+                    ),
+                  ],
+                  selected: {_hrvSubTab},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selection) =>
+                      setState(() => _hrvSubTab = selection.first),
+                ),
+                const SizedBox(height: 10),
+                Expanded(child: _hrvSubTab == 0 ? poincare() : trends()),
+              ],
+            );
+          }
 
           if (isWide) {
             return Row(
               children: [
-                Expanded(
-                  flex: 5,
-                  child: PoincareChart(
-                    data: poincareData,
-                    onSelectBeatTimestamp: _onSelectBeatTimestamp,
-                  ),
-                ),
+                Expanded(flex: 5, child: poincare()),
                 const SizedBox(width: 12),
-                Expanded(
-                  flex: 6,
-                  child: HrvTrendsChart(
-                    hrvResult: res.hrv,
-                    onSelectTimestamp: _onSyncWaveformFromTrend,
-                    onJumpToWaveform: _onJumpToWaveform,
-                    showClockTime: _showClockTime,
-                    t0SecondsOfDay: t0,
-                    sessionStart: res.sessionStartDateTime,
-                  ),
-                ),
+                Expanded(flex: 6, child: trends()),
               ],
             );
           } else {
             return SingleChildScrollView(
               child: Column(
                 children: [
-                  SizedBox(
-                    height: 380,
-                    child: PoincareChart(
-                      data: poincareData,
-                      onSelectBeatTimestamp: _onSelectBeatTimestamp,
-                    ),
-                  ),
+                  SizedBox(height: 380, child: poincare()),
                   const SizedBox(height: 16),
-                  SizedBox(
-                    height: 480,
-                    child: HrvTrendsChart(
-                      hrvResult: res.hrv,
-                      onSelectTimestamp: _onSyncWaveformFromTrend,
-                      onJumpToWaveform: _onJumpToWaveform,
-                      showClockTime: _showClockTime,
-                      t0SecondsOfDay: t0,
-                      sessionStart: res.sessionStartDateTime,
-                    ),
-                  ),
+                  SizedBox(height: 480, child: trends()),
                 ],
               ),
             );
@@ -968,10 +1467,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final res = _analysisResult!;
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: CsvExplorerWidget(
-        result: res,
-        sourceFilePath: _selectedPpgPath,
-      ),
+      child: CsvExplorerWidget(result: res, sourceFilePath: _selectedPpgPath),
     );
   }
 }
