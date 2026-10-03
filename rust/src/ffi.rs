@@ -353,6 +353,24 @@ pub extern "C" fn sensio_process_file(
                     Some((s, v)) => (Some(s), Some(v)),
                     None => (None, None),
                 }
+            } else if let Ok(entries) = std::fs::read_dir(p) {
+                let mut found = None;
+                let mut fallback = None;
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let f = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                    if f.contains("sigmot") && f.ends_with(".csv") {
+                        if fname.len() >= 15 && f.contains(&fname[..fname.len().min(15)].to_lowercase()) {
+                            found = Some(path);
+                            break;
+                        }
+                        fallback = Some(path);
+                    }
+                }
+                match found.or(fallback).and_then(|path| load_sigmot_csv(&path)) {
+                    Some((s, v)) => (Some(s), Some(v)),
+                    None => (None, None),
+                }
             } else {
                 (None, None)
             }
@@ -369,6 +387,24 @@ pub extern "C" fn sensio_process_file(
             let cand = p.join(fname.replace("_ppg_data.csv", "_temperature_data.csv"));
             if cand.exists() {
                 match load_temperature_csv(&cand) {
+                    Some((s, v)) => (Some(s), Some(v)),
+                    None => (None, None),
+                }
+            } else if let Ok(entries) = std::fs::read_dir(p) {
+                let mut found = None;
+                let mut fallback = None;
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let f = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                    if (f.contains("temperature") || f.contains("temp")) && f.ends_with(".csv") {
+                        if fname.len() >= 15 && f.contains(&fname[..fname.len().min(15)].to_lowercase()) {
+                            found = Some(path);
+                            break;
+                        }
+                        fallback = Some(path);
+                    }
+                }
+                match found.or(fallback).and_then(|path| load_temperature_csv(&path)) {
                     Some((s, v)) => (Some(s), Some(v)),
                     None => (None, None),
                 }

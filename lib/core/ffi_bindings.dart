@@ -56,17 +56,27 @@ class SensioNativeBindings {
       final exe = File(Platform.resolvedExecutable);
       final exeDir = exe.parent.path;
       final bundleFrameworksPath = '${exe.parent.parent.path}/Frameworks/libsensio_ppg_core.dylib';
+      final current = Directory.current.path;
       final paths = [
         bundleFrameworksPath,
+        '$exeDir/Frameworks/libsensio_ppg_core.dylib',
         '$exeDir/libsensio_ppg_core.dylib',
         '@rpath/libsensio_ppg_core.dylib',
+        '@executable_path/../Frameworks/libsensio_ppg_core.dylib',
+        '@loader_path/../Frameworks/libsensio_ppg_core.dylib',
         'libsensio_ppg_core.dylib',
+        '$current/macos/Frameworks/libsensio_ppg_core.dylib',
+        '$current/bin/libsensio_ppg_core.dylib',
+        '$current/rust/target/release/libsensio_ppg_core.dylib',
+        '$current/rust/target/aarch64-apple-darwin/release/libsensio_ppg_core.dylib',
+        '$current/rust/target/x86_64-apple-darwin/release/libsensio_ppg_core.dylib',
         'macos/Frameworks/libsensio_ppg_core.dylib',
         'bin/libsensio_ppg_core.dylib',
         'rust/target/release/libsensio_ppg_core.dylib',
         '../rust/target/release/libsensio_ppg_core.dylib',
       ];
 
+      final loadErrors = <String>[];
       for (final p in paths) {
         try {
           if (p.startsWith('@') || !p.contains('/') || File(p).existsSync()) {
@@ -74,15 +84,13 @@ class SensioNativeBindings {
             return SensioNativeBindings._(lib);
           }
         } catch (e) {
-          lastLoadError = 'Path "$p": $e';
+          loadErrors.add('Path "$p": $e');
         }
       }
 
-      try {
-        return SensioNativeBindings._(DynamicLibrary.process());
-      } catch (e) {
-        lastLoadError = 'process(): $e';
-      }
+      lastLoadError = loadErrors.isEmpty
+          ? 'Native library libsensio_ppg_core.dylib not found in any search path.'
+          : loadErrors.join('\n');
       return null;
     }
 

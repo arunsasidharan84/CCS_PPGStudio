@@ -25,6 +25,7 @@ class PPGAnalysisService {
     final dir = ppgFile.parent;
     final name = ppgFile.uri.pathSegments.last;
 
+    // 1. Direct standard replacement
     if (name.contains('_ppg_data.csv')) {
       final sigmotName = name.replaceAll('_ppg_data.csv', '_sigmot_data.csv');
       final candidate = File('${dir.path}/$sigmotName');
@@ -32,6 +33,36 @@ class PPGAnalysisService {
         return candidate.path;
       }
     }
+
+    // 2. Resilient directory scan by timestamp or session token
+    try {
+      if (dir.existsSync()) {
+        final timeMatch = RegExp(r'\d{8}_\d{6}').firstMatch(name)?.group(0);
+        final sessionMatch = RegExp(r'session_\d+', caseSensitive: false).firstMatch(name)?.group(0)?.toLowerCase();
+
+        final sigmotCandidates = <File>[];
+        for (final entity in dir.listSync()) {
+          if (entity is! File) continue;
+          final fName = entity.uri.pathSegments.last.toLowerCase();
+          if (fName.contains('sigmot') && fName.endsWith('.csv')) {
+            // Prioritize matching timestamp
+            if (timeMatch != null && fName.contains(timeMatch)) {
+              return entity.path;
+            }
+            // Prioritize matching session prefix
+            if (sessionMatch != null && fName.contains(sessionMatch)) {
+              return entity.path;
+            }
+            sigmotCandidates.add(entity);
+          }
+        }
+        // If only 1 sigmot file in directory, associate it
+        if (sigmotCandidates.length == 1) {
+          return sigmotCandidates.first.path;
+        }
+      }
+    } catch (_) {}
+
     return null;
   }
 
@@ -40,6 +71,7 @@ class PPGAnalysisService {
     final dir = ppgFile.parent;
     final name = ppgFile.uri.pathSegments.last;
 
+    // 1. Direct standard replacement
     if (name.contains('_ppg_data.csv')) {
       final tempName = name.replaceAll(
         '_ppg_data.csv',
@@ -50,6 +82,36 @@ class PPGAnalysisService {
         return candidate.path;
       }
     }
+
+    // 2. Resilient directory scan by timestamp or session token
+    try {
+      if (dir.existsSync()) {
+        final timeMatch = RegExp(r'\d{8}_\d{6}').firstMatch(name)?.group(0);
+        final sessionMatch = RegExp(r'session_\d+', caseSensitive: false).firstMatch(name)?.group(0)?.toLowerCase();
+
+        final tempCandidates = <File>[];
+        for (final entity in dir.listSync()) {
+          if (entity is! File) continue;
+          final fName = entity.uri.pathSegments.last.toLowerCase();
+          if ((fName.contains('temperature') || fName.contains('temp')) && fName.endsWith('.csv')) {
+            // Prioritize matching timestamp
+            if (timeMatch != null && fName.contains(timeMatch)) {
+              return entity.path;
+            }
+            // Prioritize matching session prefix
+            if (sessionMatch != null && fName.contains(sessionMatch)) {
+              return entity.path;
+            }
+            tempCandidates.add(entity);
+          }
+        }
+        // If only 1 temperature file in directory, associate it
+        if (tempCandidates.length == 1) {
+          return tempCandidates.first.path;
+        }
+      }
+    } catch (_) {}
+
     return null;
   }
 

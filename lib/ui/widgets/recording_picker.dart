@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../core/services/ppg_analysis_service.dart';
 import '../../core/services/recording_import.dart';
 import '../../core/services/recording_settings.dart';
 
@@ -13,11 +14,19 @@ Future<String?> pickRecording(BuildContext context) async {
       title: const Text('Open recording'),
       children: [
         SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, 'folder'),
+          child: const ListTile(
+            leading: Icon(Icons.folder_special, color: Color(0xFF00E5FF)),
+            title: Text('Select Folder (Auto-detect all)'),
+            subtitle: Text('Scans folder & automatically pairs Sigmot & Temperature'),
+          ),
+        ),
+        SimpleDialogOption(
           onPressed: () => Navigator.pop(ctx, 'sensio'),
           child: ListTile(
             leading: const Icon(Icons.favorite_outline),
-            title: const Text('SensIO recording'),
-            subtitle: Text(pattern),
+            title: const Text('Select SensIO File(s)'),
+            subtitle: Text('Filter: $pattern (select PPG + companion CSVs)'),
           ),
         ),
         SimpleDialogOption(
@@ -26,14 +35,6 @@ Future<String?> pickRecording(BuildContext context) async {
             leading: Icon(Icons.sensors),
             title: Text('Orbit recording'),
             subtitle: Text('.orb or .signal - PPG channel only'),
-          ),
-        ),
-        SimpleDialogOption(
-          onPressed: () => Navigator.pop(ctx, 'folder'),
-          child: const ListTile(
-            leading: Icon(Icons.folder_open),
-            title: Text('Search a folder'),
-            subtitle: Text('List matching SensIO and Orbit files'),
           ),
         ),
       ],
@@ -175,13 +176,34 @@ Future<String?> pickRecording(BuildContext context) async {
 
   // Copy any selected companion files to the same directory as the PPG file
   final ppgDir = File(ppgPath).parent.path;
+  final ppgName = File(ppgPath).uri.pathSegments.last;
+  final expectedSigmot = ppgName.replaceAll('_ppg_data.csv', '_sigmot_data.csv');
+  final expectedTemp = ppgName.replaceAll('_ppg_data.csv', '_temperature_data.csv');
+
   for (final cp in companionPaths) {
     final cName = File(cp).uri.pathSegments.last;
+    final file = File(cp);
     final target = File('$ppgDir/$cName');
     if (target.path != cp && !target.existsSync()) {
       try {
-        await File(cp).copy(target.path);
+        await file.copy(target.path);
       } catch (_) {}
+    }
+    if (cName.toLowerCase().contains('sigmot') || cName.toLowerCase().contains('motion')) {
+      final canon = File('$ppgDir/$expectedSigmot');
+      if (canon.path != cp) {
+        try {
+          await file.copy(canon.path);
+        } catch (_) {}
+      }
+    }
+    if (cName.toLowerCase().contains('temp')) {
+      final canon = File('$ppgDir/$expectedTemp');
+      if (canon.path != cp) {
+        try {
+          await file.copy(canon.path);
+        } catch (_) {}
+      }
     }
   }
 
@@ -205,8 +227,9 @@ Future<void> _promptAndImportMissingCompanions(
   final expectedSigmot = name.replaceAll('_ppg_data.csv', '_sigmot_data.csv');
   final expectedTemp = name.replaceAll('_ppg_data.csv', '_temperature_data.csv');
 
-  final hasSigmot = File('$dir/$expectedSigmot').existsSync();
-  final hasTemp = File('$dir/$expectedTemp').existsSync();
+  // Check if already found or auto-matched
+  final hasSigmot = PPGAnalysisService.findMatchingSigmot(ppgPath) != null;
+  final hasTemp = PPGAnalysisService.findMatchingTemperature(ppgPath) != null;
 
   if (hasSigmot && hasTemp) return;
 
@@ -250,11 +273,35 @@ Future<void> _promptAndImportMissingCompanions(
 
     for (final f in companions.files) {
       if (f.path == null) continue;
-      final cName = File(f.path!).uri.pathSegments.last;
-      if (cName.endsWith('_sigmot_data.csv') ||
-          cName.endsWith('_temperature_data.csv')) {
-        final target = File('$dir/$cName');
-        await File(f.path!).copy(target.path);
+      final file = File(f.path!);
+      final cName = file.uri.pathSegments.last;
+      final isSigmot = cName.toLowerCase().contains('sigmot') || cName.toLowerCase().contains('motion');
+      final isTemp = cName.toLowerCase().contains('temp');
+
+      // 1. Copy with original filename
+      final target = File('$dir/$cName');
+      if (target.path != file.path && !target.existsSync()) {
+        try {
+          await file.copy(target.path);
+        } catch (_) {}
+      }
+
+      // 2. Canonicalize for current PPG session
+      if (isSigmot) {
+        final canonSigmot = File('$dir/$expectedSigmot');
+        if (canonSigmot.path != file.path) {
+          try {
+            await file.copy(canonSigmot.path);
+          } catch (_) {}
+        }
+      }
+      if (isTemp) {
+        final canonTemp = File('$dir/$expectedTemp');
+        if (canonTemp.path != file.path) {
+          try {
+            await file.copy(canonTemp.path);
+          } catch (_) {}
+        }
       }
     }
   } catch (_) {}
