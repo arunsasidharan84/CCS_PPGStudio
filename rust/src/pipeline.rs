@@ -4,7 +4,6 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::dsp::elgendi::elgendi_find_peaks;
 use crate::dsp::filter::SosFilter;
 use crate::dsp::hrv::{
     compute_poincare_data, compute_time_resolved_hrv, generate_feature_summary,
@@ -13,7 +12,7 @@ use crate::dsp::hrv::{
 use crate::dsp::resample::{interp_1d, median, percentile, resample_uniform, sanitize_timeline};
 use crate::dsp::sqi::{
     erode, flag_filtered_outliers, flag_raw_defects, robust_scale, runs, score_window, veto,
-    WindowSqi,
+    WindowSqi, detect_beats,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -356,17 +355,21 @@ pub fn preprocess_ppg(
     let mut pulse = vec![false; filtered.len()];
     let mut quality_trace = vec![0.0; filtered.len()];
 
+    // Require agreement among overlapping windows. A single clean window
+    // must not promote all neighboring noisy samples to accepted.
+    let mut votes = vec![0usize; filtered.len()];
+    let mut accepted_votes = vec![0usize; filtered.len()];
     for w in &windows {
-        if w.accepted {
-            for i in w.start_idx..w.end_idx {
-                pulse[i] = true;
-            }
-        }
-        let q = w.sqi.quality;
         for i in w.start_idx..w.end_idx {
-            if q > quality_trace[i] {
-                quality_trace[i] = q;
-            }
+            votes[i] += 1;
+            accepted_votes[i] += usize::from(w.accepted);
+            quality_trace[i] += w.sqi.quality;
+        }
+    }
+    for i in 0..filtered.len() {
+        if votes[i] > 0 {
+            quality_trace[i] /= votes[i] as f64;
+            pulse[i] = usable[i] && accepted_votes[i] * 2 > votes[i];
         }
     }
 
@@ -407,180 +410,61 @@ pub fn preprocess_ppg(
 
 /// Detect systolic peaks on valid pulse intervals matching _extract_global_peaks()
 pub fn extract_global_peaks(res: &PPGPreprocessResult) -> Vec<usize> {
-    let mut all_peaks = Vec::new();
-    for (s, e) in runs(&res.pulse) {
-        if e - s < (1.5 * res.fs).round() as usize {
-            continue;
-        }
-        let seg = &res.filtered[s..e];
-        let pks = elgendi_find_peaks(seg, res.fs);
-        for p in pks {
-            all_peaks.push(s + p);
+    let mut candidates = Vec::new();
+    // Use the same detector and local HR hint used for quality scoring.
+    for window in &res.windows {
+        if !window.accepted { continue; }
+        let signal = &res.filtered[window.start_idx..window.end_idx];
+        for p in detect_beats(signal, res.fs, window.sqi.hr_bpm) {
+            let global = window.start_idx + p;
+            if res.pulse[global] { candidates.push(global); }
         }
     }
-    all_peaks.sort();
-    all_peaks.dedup();
-    all_peaks
-}
-
-fn median_filter_reflect(x: &[i32], size: usize) -> Vec<i32> {
-    let n = x.len();
-    let mut out = vec![0; n];
-    let half = (size / 2) as isize;
-
-    for i in 0..n {
-        let mut win = Vec::with_capacity(size);
-        for off in -half..=half {
-            let mut idx = (i as isize) + off;
-            if idx < 0 {
-                idx = -idx - 1;
-            } else if idx >= n as isize {
-                idx = 2 * (n as isize) - 1 - idx;
+    candidates.sort_unstable();
+    candidates.dedup();
+    let mut peaks: Vec<usize> = Vec::new();
+    let refractory = (0.30 * res.fs).round() as usize;
+    for p in candidates {
+        if let Some(&last) = peaks.last() {
+            if p - last < refractory {
+                if res.filtered[p] > res.filtered[last] { *peaks.last_mut().unwrap() = p; }
+                continue;
             }
-            let clamped = (idx.max(0) as usize).min(n - 1);
-            win.push(x[clamped]);
         }
-        win.sort();
-        out[i] = win[win.len() / 2];
+        peaks.push(p);
     }
-    out
+    peaks
 }
 
-fn coalesce_short_runs(
-    mut episodes: Vec<(usize, usize, i32)>,
-    min_dur: usize,
-) -> Vec<(usize, usize, i32)> {
-    let mut changed = true;
-    while changed {
-        changed = false;
-        let mut new_ep: Vec<(usize, usize, i32)> = Vec::new();
-        let mut i = 0;
-        while i < episodes.len() {
-            let (s, e, st) = episodes[i];
-            let dur = e - s;
-            if dur < min_dur && episodes.len() > 1 {
-                if let Some(last) = new_ep.last_mut() {
-                    last.1 = e;
-                    changed = true;
-                } else if i + 1 < episodes.len() {
-                    episodes[i + 1].0 = s;
-                    changed = true;
-                } else {
-                    new_ep.push((s, e, st));
-                }
-            } else {
-                if let Some(last) = new_ep.last_mut() {
-                    if last.2 == st {
-                        last.1 = e;
-                    } else {
-                        new_ep.push((s, e, st));
-                    }
-                } else {
-                    new_ep.push((s, e, st));
-                }
-            }
-            i += 1;
-        }
-        episodes = new_ep;
-    }
-    episodes
-}
-
-/// 100% gapless macro-episode partitioning matching data_manager.py
-pub fn generate_gapless_segments(
-    res: &PPGPreprocessResult,
-) -> (Vec<ContinuousSegment>, Vec<bool>) {
+/// Exact quality episodes: no temporal smoothing may turn an artifact into
+/// accepted signal. Display labels, coverage, and the HRV mask agree.
+pub fn generate_gapless_segments(res: &PPGPreprocessResult) -> (Vec<ContinuousSegment>, Vec<bool>) {
+    if res.time.is_empty() { return (Vec::new(), Vec::new()); }
     let n = res.time.len();
-    if n == 0 {
-        return (Vec::new(), Vec::new());
-    }
-
     let t0 = res.time[0];
-    let t_end = *res.time.last().unwrap();
-    let total_s = t_end - t0;
-    let sfreq = res.fs;
-    let n_sec = total_s.ceil() as usize;
-
-    let mut state_arr = vec![0i32; n_sec];
-
-    for i in 0..n_sec {
-        let s_idx = ((i as f64) * sfreq).round() as usize;
-        let e_idx = ((((i + 1) as f64) * sfreq).round() as usize).min(res.usable.len());
-        if e_idx > s_idx {
-            let usable_count = res.usable[s_idx..e_idx].iter().filter(|&&u| u).count();
-            let pulse_count = res.pulse[s_idx..e_idx].iter().filter(|&&p| p).count();
-            let len_f = (e_idx - s_idx) as f64;
-            let usable_sec = (usable_count as f64) / len_f > 0.5;
-            let pulse_sec = (pulse_count as f64) / len_f > 0.5;
-
-            if !usable_sec {
-                state_arr[i] = 0;
-            } else if !pulse_sec {
-                state_arr[i] = 1;
-            } else {
-                state_arr[i] = 2;
-            }
-        }
-    }
-
-    // Median filter over 31 seconds
-    let smooth_state = median_filter_reflect(&state_arr, 31);
-
-    // Run segments
-    let mut initial_episodes: Vec<(usize, usize, i32)> = Vec::new();
-    let mut curr_state = smooth_state[0];
-    let mut curr_start = 0;
-
-    for i in 1..n_sec {
-        if smooth_state[i] != curr_state {
-            initial_episodes.push((curr_start, i, curr_state));
-            curr_start = i;
-            curr_state = smooth_state[i];
-        }
-    }
-    initial_episodes.push((curr_start, n_sec, curr_state));
-
-    let coalesced = coalesce_short_runs(initial_episodes, 30);
-
+    let end = res.time[n - 1] - t0;
+    let state = |i: usize| if !res.usable[i] { 0 } else if !res.pulse[i] { 1 } else { 2 };
     let mut segments = Vec::new();
-    let num_ep = coalesced.len();
-    for (i, &(s, e, st)) in coalesced.iter().enumerate() {
-        let (tag, is_good, reason_text) = match st {
-            0 => ("BAD_artifact", false, "Sensor Dropout / Defect"),
-            1 => ("REJECT", false, "Motion Artifact / Low Quality"),
-            _ => ("GOOD", true, "Clean Cardiac Pulse"),
+    let mut start = 0;
+    for i in 1..=n {
+        if i < n && state(i) == state(start) { continue; }
+        let st = state(start);
+        let onset = res.time[start] - t0;
+        let stop = if i == n { end } else { res.time[i] - t0 };
+        let (tag, reason) = match st {
+            0 => ("BAD_artifact", "Sensor defect, gap or filter boundary"),
+            1 => ("REJECT", "Insufficient pulse quality or inconsistent overlapping windows"),
+            _ => ("GOOD", "Accepted pulse quality"),
         };
-        let onset = s as f64;
-        let end = if i == num_ep - 1 { total_s } else { e as f64 };
-        let dur = end - onset;
-
         segments.push(ContinuousSegment {
-            id: i,
-            onset_s: (onset * 1000.0).round() / 1000.0,
-            duration_s: (dur * 1000.0).round() / 1000.0,
-            end_s: (end * 1000.0).round() / 1000.0,
-            description: tag.to_string(),
-            is_good,
-            hr_bpm: None,
-            quality_score: None,
-            reason: Some(reason_text.to_string()),
+            id: segments.len(), onset_s: onset, duration_s: stop - onset, end_s: stop,
+            description: tag.to_owned(), is_good: st == 2, hr_bpm: None,
+            quality_score: Some(res.quality_trace[start..i].iter().sum::<f64>() / (i - start) as f64),
+            reason: Some(reason.to_owned()),
         });
+        start = i;
     }
-
-    // Build valid_mask matching get_valid_mask()
-    let mut valid_mask = vec![false; n];
-    for seg in &segments {
-        if seg.is_good {
-            for idx in 0..n {
-                let t_rel = res.time[idx] - t0;
-                if t_rel >= seg.onset_s && t_rel < seg.end_s {
-                    valid_mask[idx] = true;
-                }
-            }
-        }
-    }
-
-    (segments, valid_mask)
+    (segments, res.pulse.clone())
 }
 
 /// Analyze entire PPG session end-to-end
@@ -659,7 +543,8 @@ pub fn analyze_session(
     let mut rr_ms = Vec::new();
     if peak_times.len() >= 2 {
         for i in 0..peak_times.len() - 1 {
-            rr_ms.push((peak_times[i + 1] - peak_times[i]) * 1000.0);
+            let continuous = prep.pulse[peaks_indices[i]..=peaks_indices[i + 1]].iter().all(|&v| v);
+            rr_ms.push(if continuous { (peak_times[i + 1] - peak_times[i]) * 1000.0 } else { f64::NAN });
         }
     }
 

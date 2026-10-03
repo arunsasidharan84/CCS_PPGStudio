@@ -49,8 +49,13 @@ class _WaveformViewerState extends State<WaveformViewer> {
   Widget build(BuildContext context) {
     // Slice samples in current window
     final fs = widget.result.sampleRate > 0 ? widget.result.sampleRate : 50.0;
-    final startIdx = (widget.currentStartS * fs).floor().clamp(0, widget.result.time.length);
-    final endIdx = ((widget.currentStartS + widget.windowDurationS) * fs).ceil().clamp(0, widget.result.time.length);
+    final startIdx = (widget.currentStartS * fs).floor().clamp(
+      0,
+      widget.result.time.length,
+    );
+    final endIdx = ((widget.currentStartS + widget.windowDurationS) * fs)
+        .ceil()
+        .clamp(0, widget.result.time.length);
 
     final windowTimes = widget.result.time.sublist(startIdx, endIdx);
     final windowFiltered = widget.result.filtered.sublist(startIdx, endIdx);
@@ -94,7 +99,9 @@ class _WaveformViewerState extends State<WaveformViewer> {
             decoration: BoxDecoration(
               color: const Color(0xFF090D16),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: SensioTheme.border.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: SensioTheme.border.withValues(alpha: 0.4),
+              ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -147,11 +154,16 @@ class _WaveformViewerState extends State<WaveformViewer> {
                     top: 10,
                     right: 12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: SensioTheme.surface.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: SensioTheme.border.withValues(alpha: 0.4)),
+                        border: Border.all(
+                          color: SensioTheme.border.withValues(alpha: 0.4),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -169,7 +181,11 @@ class _WaveformViewerState extends State<WaveformViewer> {
                             const SizedBox(width: 6),
                             InkWell(
                               onTap: () => _setGain(1.0),
-                              child: const Icon(Icons.refresh, size: 13, color: Colors.white70),
+                              child: const Icon(
+                                Icons.refresh,
+                                size: 13,
+                                color: Colors.white70,
+                              ),
                             ),
                           ],
                         ],
@@ -193,19 +209,31 @@ class _WaveformViewerState extends State<WaveformViewer> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.first_page, color: Colors.white70, size: 20),
+                    icon: const Icon(
+                      Icons.first_page,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
                     tooltip: 'Start of session',
                     onPressed: () => widget.onSeek(0.0),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.chevron_left, color: Colors.white70, size: 20),
+                    icon: const Icon(
+                      Icons.chevron_left,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
                     tooltip: 'Step back 15s',
                     onPressed: () => widget.onSeek(
                       math.max(0.0, widget.currentStartS - 15.0),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.chevron_right, color: Colors.white70, size: 20),
+                    icon: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
                     tooltip: 'Step forward 15s',
                     onPressed: () => widget.onSeek(
                       math.min(
@@ -215,22 +243,40 @@ class _WaveformViewerState extends State<WaveformViewer> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.last_page, color: Colors.white70, size: 20),
+                    icon: const Icon(
+                      Icons.last_page,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
                     tooltip: 'End of session',
                     onPressed: () => widget.onSeek(
-                      math.max(0.0, widget.result.totalDurationS - widget.windowDurationS),
+                      math.max(
+                        0.0,
+                        widget.result.totalDurationS - widget.windowDurationS,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 4),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: SensioTheme.goodPulse.withValues(alpha: 0.2),
+                      backgroundColor: SensioTheme.goodPulse.withValues(
+                        alpha: 0.2,
+                      ),
                       foregroundColor: SensioTheme.goodPulse,
-                      side: const BorderSide(color: SensioTheme.goodPulse, width: 1),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      side: const BorderSide(
+                        color: SensioTheme.goodPulse,
+                        width: 1,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                     ),
                     icon: const Icon(Icons.favorite, size: 13),
-                    label: const Text('Next Clean Pulse', style: TextStyle(fontSize: 11)),
+                    label: const Text(
+                      'Next Clean Pulse',
+                      style: TextStyle(fontSize: 11),
+                    ),
                     onPressed: _jumpToNextCleanPulse,
                   ),
                 ],
@@ -265,12 +311,19 @@ class _WaveformViewerState extends State<WaveformViewer> {
                         borderRadius: BorderRadius.circular(4),
                         onTap: () => _setGain(preset),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSel ? SensioTheme.accent : Colors.transparent,
+                            color: isSel
+                                ? SensioTheme.accent
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: isSel ? SensioTheme.accent : SensioTheme.border.withValues(alpha: 0.4),
+                              color: isSel
+                                  ? SensioTheme.accent
+                                  : SensioTheme.border.withValues(alpha: 0.4),
                             ),
                           ),
                           child: Text(
@@ -278,7 +331,9 @@ class _WaveformViewerState extends State<WaveformViewer> {
                             style: TextStyle(
                               color: isSel ? Colors.black : Colors.white70,
                               fontSize: 10,
-                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSel
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -293,7 +348,9 @@ class _WaveformViewerState extends State<WaveformViewer> {
                 decoration: BoxDecoration(
                   color: SensioTheme.surface.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: SensioTheme.border.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: SensioTheme.border.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Text(
                   '$startFormatted  →  $endFormatted  (Total: $totalFormatted)',
@@ -345,10 +402,12 @@ class _WaveformViewerState extends State<WaveformViewer> {
   void _jumpToNextCleanPulse() {
     for (final seg in widget.result.segments) {
       if (seg.isGood && seg.onsetS > widget.currentStartS + 1.0) {
-        widget.onSeek(math.min(
-          widget.result.totalDurationS - widget.windowDurationS,
-          seg.onsetS,
-        ));
+        widget.onSeek(
+          math.min(
+            widget.result.totalDurationS - widget.windowDurationS,
+            seg.onsetS,
+          ),
+        );
         return;
       }
     }
@@ -421,12 +480,20 @@ class _PpgWaveformPainter extends CustomPainter {
     if (span < 0.05) {
       final tp = TextPainter(
         text: const TextSpan(
-          text: 'Signal Baseline / Artifact Episode — Click "Next Clean Pulse" below',
-          style: TextStyle(color: Colors.white38, fontSize: 13, fontStyle: FontStyle.italic),
+          text:
+              'Signal Baseline / Artifact Episode — Click "Next Clean Pulse" below',
+          style: TextStyle(
+            color: Colors.white38,
+            fontSize: 13,
+            fontStyle: FontStyle.italic,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset((size.width - tp.width) / 2, (plotHeight - tp.height) / 2 - 16));
+      tp.paint(
+        canvas,
+        Offset((size.width - tp.width) / 2, (plotHeight - tp.height) / 2 - 16),
+      );
     }
 
     // Baseline-centered vertical scaling with verticalGain
@@ -470,7 +537,8 @@ class _PpgWaveformPainter extends CustomPainter {
       final localIdx = p - startIdx;
       if (localIdx >= 0 && localIdx < filtered.length) {
         final x = (localIdx / math.max(filtered.length - 1, 1)) * size.width;
-        final y = plotHeight - ((filtered[localIdx] - lower) / range) * plotHeight;
+        final y =
+            plotHeight - ((filtered[localIdx] - lower) / range) * plotHeight;
 
         // Draw vertical tick and dot
         canvas.drawLine(Offset(x, y - 16), Offset(x, y - 4), tickPaint);
@@ -495,7 +563,11 @@ class _PpgWaveformPainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: timeText,
-          style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'monospace'),
+          style: const TextStyle(
+            color: Colors.white38,
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

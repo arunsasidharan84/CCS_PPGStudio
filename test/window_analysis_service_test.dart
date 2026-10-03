@@ -80,7 +80,11 @@ void main() {
     });
 
     test('Full session sub-window returns identical coverage and count', () {
-      final stats = WindowAnalysisService.computeSubWindow(mockSession, 0.0, 300.0);
+      final stats = WindowAnalysisService.computeSubWindow(
+        mockSession,
+        0.0,
+        300.0,
+      );
       expect(stats.windowDurationS, 300.0);
       // Good duration: 100 + 150 = 250s. Coverage = 250/300 = 83.33%
       expect(stats.coveragePct, closeTo(83.33, 0.01));
@@ -92,7 +96,11 @@ void main() {
     });
 
     test('Sub-window isolates early interval (0 to 60s)', () {
-      final stats = WindowAnalysisService.computeSubWindow(mockSession, 0.0, 60.0);
+      final stats = WindowAnalysisService.computeSubWindow(
+        mockSession,
+        0.0,
+        60.0,
+      );
       expect(stats.windowDurationS, 60.0);
       // Interval 0..60 is completely in segment 1 (isGood: true) -> 100% coverage
       expect(stats.coveragePct, 100.0);
@@ -108,7 +116,11 @@ void main() {
     });
 
     test('Sub-window isolates noisy interval (100 to 150s)', () {
-      final stats = WindowAnalysisService.computeSubWindow(mockSession, 100.0, 150.0);
+      final stats = WindowAnalysisService.computeSubWindow(
+        mockSession,
+        100.0,
+        150.0,
+      );
       // Interval 100..150 is segment 2 (isGood: false) -> 0% coverage
       expect(stats.coveragePct, 0.0);
       expect(stats.detectedBeats, 0);
@@ -119,7 +131,11 @@ void main() {
     });
 
     test('Poincare recalculation on sub-window produces valid geometry', () {
-      final stats = WindowAnalysisService.computeSubWindow(mockSession, 0.0, 50.0);
+      final stats = WindowAnalysisService.computeSubWindow(
+        mockSession,
+        0.0,
+        50.0,
+      );
       // Timestamps at 10, 20, 30, 40 fall in 0..50 -> 4 points
       expect(stats.poincare.x.length, 4);
       expect(stats.poincare.ellipseX.length, 100);

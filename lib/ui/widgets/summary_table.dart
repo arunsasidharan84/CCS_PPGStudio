@@ -355,6 +355,7 @@ class _SummaryTableState extends State<SummaryTable> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: SensioTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Row(
@@ -543,7 +544,7 @@ class _SummaryTableState extends State<SummaryTable> {
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 650;
+              final isNarrow = constraints.maxWidth < 900;
               final domainChips = SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -729,7 +730,7 @@ class _SummaryTableState extends State<SummaryTable> {
                       ),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
-                          final isNarrow = constraints.maxWidth < 650;
+                          final isNarrow = constraints.maxWidth < 900;
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -765,12 +766,14 @@ class _SummaryTableState extends State<SummaryTable> {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(
-                                      r.metric,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: Colors.white,
+                                    Expanded(
+                                      child: Text(
+                                        r.metric,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ),
                                     if (info != null) ...[
@@ -792,7 +795,7 @@ class _SummaryTableState extends State<SummaryTable> {
                                             ),
                                       ),
                                     ],
-                                    const Spacer(),
+                                    const SizedBox(width: 4),
                                     Icon(
                                       isExpanded
                                           ? Icons.expand_less
@@ -929,12 +932,14 @@ class _SummaryTableState extends State<SummaryTable> {
                                         children: [
                                           Row(
                                             children: [
-                                              Text(
-                                                r.metric,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 13,
-                                                  color: Colors.white,
+                                              Expanded(
+                                                child: Text(
+                                                  r.metric,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 13,
+                                                    color: Colors.white,
+                                                  ),
                                                 ),
                                               ),
                                               if (info != null) ...[

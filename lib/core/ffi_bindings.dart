@@ -5,24 +5,24 @@ import 'package:ffi/ffi.dart';
 /// FFI bindings to native `libsensio_ppg_core`
 class SensioNativeBindings {
   SensioNativeBindings._(DynamicLibrary lib)
-      : _getVersion = lib.lookupFunction<
-          Pointer<Utf8> Function(),
-          Pointer<Utf8> Function()>(
-          'sensio_get_version',
-        ),
-        _processFile = lib.lookupFunction<
-          Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Double),
-          Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, double)>(
-          'sensio_process_file',
-        ),
-        _freeString = lib.lookupFunction<
-          Void Function(Pointer<Utf8>),
-          void Function(Pointer<Utf8>)>(
-          'sensio_free_string',
-        );
+    : _getVersion = lib
+          .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+            'sensio_get_version',
+          ),
+      _processFile = lib
+          .lookupFunction<
+            Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Double),
+            Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, double)
+          >('sensio_process_file'),
+      _freeString = lib
+          .lookupFunction<
+            Void Function(Pointer<Utf8>),
+            void Function(Pointer<Utf8>)
+          >('sensio_free_string');
 
   final Pointer<Utf8> Function() _getVersion;
-  final Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, double) _processFile;
+  final Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, double)
+  _processFile;
   final void Function(Pointer<Utf8>) _freeString;
 
   static SensioNativeBindings? tryLoad() {
@@ -63,7 +63,9 @@ class SensioNativeBindings {
             return SensioNativeBindings._(DynamicLibrary.open(p));
           }
         }
-        return SensioNativeBindings._(DynamicLibrary.open('libsensio_ppg_core.so'));
+        return SensioNativeBindings._(
+          DynamicLibrary.open('libsensio_ppg_core.so'),
+        );
       }
       if (Platform.isWindows) {
         final paths = [
@@ -76,7 +78,9 @@ class SensioNativeBindings {
             return SensioNativeBindings._(DynamicLibrary.open(p));
           }
         }
-        return SensioNativeBindings._(DynamicLibrary.open('sensio_ppg_core.dll'));
+        return SensioNativeBindings._(
+          DynamicLibrary.open('sensio_ppg_core.dll'),
+        );
       }
     } catch (_) {
       // Failed to load library
@@ -90,7 +94,11 @@ class SensioNativeBindings {
     return ptr.toDartString();
   }
 
-  String processFile(String ppgPath, {String? sigmotPath, double sampleRate = 50.0}) {
+  String processFile(
+    String ppgPath, {
+    String? sigmotPath,
+    double sampleRate = 50.0,
+  }) {
     final ppgPtr = ppgPath.toNativeUtf8();
     final sigmotPtr = sigmotPath != null ? sigmotPath.toNativeUtf8() : nullptr;
 

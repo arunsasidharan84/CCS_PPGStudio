@@ -35,7 +35,9 @@ class CsvExportService {
       sb.write('$i,${ts.toStringAsFixed(1)},$clockTimeStr');
       for (final k in metricKeys) {
         final valList = metrics[k];
-        final val = (valList != null && i < valList.length) ? valList[i] : double.nan;
+        final val = (valList != null && i < valList.length)
+            ? valList[i]
+            : double.nan;
         if (val.isFinite) {
           if (k == 'Skin_Temperature') {
             sb.write(',${val.toStringAsFixed(2)}');
@@ -96,7 +98,9 @@ class CsvExportService {
       );
 
       if (savePath != null && savePath.isNotEmpty) {
-        final targetPath = savePath.endsWith('.csv') ? savePath : '$savePath.csv';
+        final targetPath = savePath.endsWith('.csv')
+            ? savePath
+            : '$savePath.csv';
         final file = File(targetPath);
         await file.writeAsString(csvContent);
         return file.path;

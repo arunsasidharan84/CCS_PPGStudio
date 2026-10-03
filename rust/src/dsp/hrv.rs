@@ -501,18 +501,24 @@ pub fn compute_time_resolved_hrv(
             }
         }
 
-        let record = if win_peak_times.len() >= 3 && !in_win_indices.is_empty() {
-            let mut rr_ms = Vec::with_capacity(win_peak_times.len() - 1);
-            for i in 0..win_peak_times.len() - 1 {
-                rr_ms.push((win_peak_times[i + 1] - win_peak_times[i]) * 1000.0);
-            }
-            let seg_end_idx = *in_win_indices.last().unwrap() + 1;
-            let seg_sig = &signal_series[seg_start_idx..seg_end_idx];
-
-            compute_hrv_window(&rr_ms, Some(seg_sig), Some(&rel_peaks), fs)
-        } else {
-            HrvWindowMetrics::default()
-        };
+        // Select a contiguous accepted run inside this epoch so spectral
+        // interpolation never compresses time across rejected gaps.
+        let record = if !in_win_indices.is_empty() {
+            let start = *in_win_indices.first().unwrap();
+            let end = *in_win_indices.last().unwrap() + 1;
+            let local_mask: Vec<bool> = (start..end).map(|i| valid_mask.map_or(true, |m| m[i])).collect();
+            let longest = crate::dsp::sqi::runs(&local_mask).into_iter().max_by_key(|&(s,e)| e-s);
+            if let Some((s,e)) = longest {
+                let s = start + s;
+                let e = start + e;
+                if (e-s) as f64 / fs >= 30.0 {
+                    let selected: Vec<usize> = peaks_indices.iter().copied().filter(|&p| p >= s && p < e).collect();
+                    let rr: Vec<f64> = selected.windows(2).map(|p| (time_series[p[1]]-time_series[p[0]])*1000.0).collect();
+                    let relative: Vec<usize> = selected.iter().map(|p| p-s).collect();
+                    compute_hrv_window(&rr, Some(&signal_series[s..e]), Some(&relative), fs)
+                } else { HrvWindowMetrics::default() }
+            } else { HrvWindowMetrics::default() }
+        } else { HrvWindowMetrics::default() };
 
         timestamps.push(mid_time - t0);
         records.push(record);
@@ -634,52 +640,23 @@ pub fn compute_poincare_data(rr_ms: &[f64], peak_times: Option<&[f64]>) -> Poinc
         _ => vec![0.0; rr_ms.len()],
     };
 
-    // 1. Absolute physiological limits (350ms to 1600ms)
-    let mut valid_rr = Vec::new();
-    let mut valid_t = Vec::new();
-    for i in 0..rr_ms.len() {
-        let r = rr_ms[i];
-        if r >= 350.0 && r <= 1600.0 {
-            valid_rr.push(r);
-            if i < t_rr.len() {
-                valid_t.push(t_rr[i]);
-            } else {
-                valid_t.push(0.0);
-            }
-        }
+    // Evaluate original neighbors in place. Never compact RR intervals and
+    // accidentally manufacture a pair across rejected beats or signal gaps.
+    let mut x = Vec::new();
+    let mut y = Vec::new();
+    let mut timestamps = Vec::new();
+    for i in 0..rr_ms.len() - 1 {
+        let left = rr_ms[i];
+        let right = rr_ms[i + 1];
+        if !(350.0..=1600.0).contains(&left) || !(350.0..=1600.0).contains(&right) { continue; }
+        if (right - left).abs() > left * 0.25 { continue; }
+        x.push(left);
+        y.push(right);
+        timestamps.push(t_rr.get(i).copied().unwrap_or(0.0));
     }
-
-    // Relative filter (25% jump)
-    let mut clean_rr = Vec::new();
-    let mut clean_t = Vec::new();
-    if valid_rr.len() >= 2 {
-        clean_rr.push(valid_rr[0]);
-        clean_t.push(valid_t[0]);
-        for i in 0..valid_rr.len() - 1 {
-            let diff = (valid_rr[i + 1] - valid_rr[i]).abs();
-            if diff <= valid_rr[i] * 0.25 {
-                clean_rr.push(valid_rr[i + 1]);
-                clean_t.push(valid_t[i + 1]);
-            }
-        }
-    }
-
-    if clean_rr.len() < 3 {
-        return empty;
-    }
-
-    let n = clean_rr.len();
-    let mut x = Vec::with_capacity(n - 1);
-    let mut y = Vec::with_capacity(n - 1);
-    let mut timestamps = Vec::with_capacity(n - 1);
-
-    for i in 0..n - 1 {
-        x.push(clean_rr[i]);
-        y.push(clean_rr[i + 1]);
-        timestamps.push((clean_t[i] * 1000.0).round() / 1000.0);
-    }
-
-    let mean_rr = clean_rr.iter().sum::<f64>() / (n as f64);
+    if x.len() < 2 { return empty; }
+    let n = x.len() + 1;
+    let mean_rr = (x.iter().sum::<f64>() + y.iter().sum::<f64>()) / (2 * x.len()) as f64;
 
     let mut diff_xy = Vec::with_capacity(n - 1);
     let mut sum_xy = Vec::with_capacity(n - 1);
@@ -696,7 +673,7 @@ pub fn compute_poincare_data(rr_ms: &[f64], peak_times: Option<&[f64]>) -> Poinc
     let sd2 = (sum_xy.iter().map(|&v| (v - m_sum).powi(2)).sum::<f64>() / ((n - 2) as f64)).sqrt()
         / 2.0f64.sqrt();
 
-    // 95% confidence ellipse geometry
+    // Two-SD dispersion ellipse (not a calibrated confidence region).
     let a = 2.0 * sd2;
     let b = 2.0 * sd1;
     let rot_angle = PI / 4.0;

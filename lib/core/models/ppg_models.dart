@@ -61,14 +61,24 @@ class PoincareData {
 
   factory PoincareData.fromJson(Map<String, dynamic> json) {
     return PoincareData(
-      x: (json['x'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      y: (json['y'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      timestamps: (json['timestamps'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
+      x: (json['x'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      y: (json['y'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      timestamps: (json['timestamps'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
       meanRr: (json['mean_rr'] as num?)?.toDouble() ?? 0.0,
       sd1: (json['sd1'] as num?)?.toDouble() ?? 0.0,
       sd2: (json['sd2'] as num?)?.toDouble() ?? 0.0,
-      ellipseX: (json['ellipse_x'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      ellipseY: (json['ellipse_y'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
+      ellipseX: (json['ellipse_x'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      ellipseY: (json['ellipse_y'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
     );
   }
 }
@@ -93,12 +103,16 @@ class TimeResolvedHrvResult {
 
     rawMetrics.forEach((key, val) {
       if (val is List) {
-        parsedMetrics[key] = val.map((e) => (e as num?)?.toDouble() ?? double.nan).toList();
+        parsedMetrics[key] = val
+            .map((e) => (e as num?)?.toDouble() ?? double.nan)
+            .toList();
       }
     });
 
     return TimeResolvedHrvResult(
-      timestamps: (json['timestamps'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
+      timestamps: (json['timestamps'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
       windowS: (json['window_s'] as num?)?.toDouble() ?? 60.0,
       stepS: (json['step_s'] as num?)?.toDouble() ?? 15.0,
       metrics: parsedMetrics,
@@ -168,6 +182,8 @@ class SessionAnalysisResult {
   final TimeResolvedHrvResult hrv;
   final PoincareData poincare;
   final List<FeatureSummaryRow> summary;
+  final String pipelineMode;
+  final Map<String, double>? ipfmDiagnostics;
 
   SessionAnalysisResult({
     required this.totalDurationS,
@@ -189,11 +205,18 @@ class SessionAnalysisResult {
     required this.hrv,
     required this.poincare,
     required this.summary,
+    this.pipelineMode = 'standard',
+    this.ipfmDiagnostics,
   });
 
   SessionAnalysisResult copyWith({
     DateTime? sessionStartDateTime,
     double? startTimeOfDayS,
+    String? pipelineMode,
+    Map<String, double>? ipfmDiagnostics,
+    TimeResolvedHrvResult? hrv,
+    PoincareData? poincare,
+    List<FeatureSummaryRow>? summary,
   }) {
     return SessionAnalysisResult(
       totalDurationS: totalDurationS,
@@ -212,9 +235,11 @@ class SessionAnalysisResult {
       sigmotTrace: sigmotTrace,
       peaksIndices: peaksIndices,
       gaplessSegments: gaplessSegments,
-      hrv: hrv,
-      poincare: poincare,
-      summary: summary,
+      hrv: hrv ?? this.hrv,
+      poincare: poincare ?? this.poincare,
+      summary: summary ?? this.summary,
+      pipelineMode: pipelineMode ?? this.pipelineMode,
+      ipfmDiagnostics: ipfmDiagnostics ?? this.ipfmDiagnostics,
     );
   }
 
@@ -231,22 +256,46 @@ class SessionAnalysisResult {
       coveragePct: (json['coverage_pct'] as num?)?.toDouble() ?? 0.0,
       acceptedWindowCount: json['accepted_window_count'] as int? ?? 0,
       totalWindowCount: json['total_window_count'] as int? ?? 0,
-      time: (json['time'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      normPpg: (json['norm_ppg'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      filtered: (json['filtered'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      usableMask: (json['usable_mask'] as List<dynamic>? ?? []).map((e) => e as bool).toList(),
-      pulseMask: (json['pulse_mask'] as List<dynamic>? ?? []).map((e) => e as bool).toList(),
-      qualityTrace: (json['quality_trace'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      sigmotTrace: (json['sigmot_trace'] as List<dynamic>? ?? []).map((e) => (e as num).toDouble()).toList(),
-      peaksIndices: (json['peaks_indices'] as List<dynamic>? ?? []).map((e) => e as int).toList(),
+      time: (json['time'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      normPpg: (json['norm_ppg'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      filtered: (json['filtered'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      usableMask: (json['usable_mask'] as List<dynamic>? ?? [])
+          .map((e) => e as bool)
+          .toList(),
+      pulseMask: (json['pulse_mask'] as List<dynamic>? ?? [])
+          .map((e) => e as bool)
+          .toList(),
+      qualityTrace: (json['quality_trace'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      sigmotTrace: (json['sigmot_trace'] as List<dynamic>? ?? [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      peaksIndices: (json['peaks_indices'] as List<dynamic>? ?? [])
+          .map((e) => e as int)
+          .toList(),
       gaplessSegments: (json['gapless_segments'] as List<dynamic>? ?? [])
           .map((e) => ContinuousSegment.fromJson(e as Map<String, dynamic>))
           .toList(),
-      hrv: TimeResolvedHrvResult.fromJson(json['hrv'] as Map<String, dynamic>? ?? {}),
-      poincare: PoincareData.fromJson(json['poincare'] as Map<String, dynamic>? ?? {}),
+      hrv: TimeResolvedHrvResult.fromJson(
+        json['hrv'] as Map<String, dynamic>? ?? {},
+      ),
+      poincare: PoincareData.fromJson(
+        json['poincare'] as Map<String, dynamic>? ?? {},
+      ),
       summary: (json['summary'] as List<dynamic>? ?? [])
           .map((e) => FeatureSummaryRow.fromJson(e as Map<String, dynamic>))
           .toList(),
+      pipelineMode: json['pipeline_mode'] as String? ?? 'standard',
+      ipfmDiagnostics: (json['ipfm_diagnostics'] as Map<String, dynamic>?)?.map(
+        (k, v) => MapEntry(k, (v as num).toDouble()),
+      ),
     );
   }
 }

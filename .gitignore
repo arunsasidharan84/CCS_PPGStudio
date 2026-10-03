@@ -50,3 +50,9 @@ rust/target/
 ios/Frameworks/
 macos/Frameworks/
 android/app/src/main/jniLibs/
+
+# Temporary files and artifacts
+tmp/
+output/
+tool/
+dist/

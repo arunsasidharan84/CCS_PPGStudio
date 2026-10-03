@@ -74,7 +74,8 @@ class WindowAnalysisService {
         goodDurationS += (overlapEnd - overlapStart);
       }
     }
-    final coveragePct = ((goodDurationS / winDur) * 100.0 * 100.0).round() / 100.0;
+    final coveragePct =
+        ((goodDurationS / winDur) * 100.0 * 100.0).round() / 100.0;
 
     // 2. Detected beats within window
     int beatCount = 0;
@@ -108,7 +109,11 @@ class WindowAnalysisService {
     );
   }
 
-  static PoincareData _filterPoincare(PoincareData orig, double winStart, double winEnd) {
+  static PoincareData _filterPoincare(
+    PoincareData orig,
+    double winStart,
+    double winEnd,
+  ) {
     if (orig.timestamps.isEmpty || orig.x.isEmpty) {
       return orig;
     }
@@ -117,7 +122,10 @@ class WindowAnalysisService {
     final filteredY = <double>[];
     final filteredTs = <double>[];
 
-    final n = math.min(orig.x.length, math.min(orig.y.length, orig.timestamps.length));
+    final n = math.min(
+      orig.x.length,
+      math.min(orig.y.length, orig.timestamps.length),
+    );
     for (int i = 0; i < n; i++) {
       final t = orig.timestamps[i];
       if (t >= winStart && t <= winEnd) {
@@ -133,7 +141,9 @@ class WindowAnalysisService {
         x: filteredX,
         y: filteredY,
         timestamps: filteredTs,
-        meanRr: filteredX.isNotEmpty ? filteredX.reduce((a, b) => a + b) / filteredX.length : 0.0,
+        meanRr: filteredX.isNotEmpty
+            ? filteredX.reduce((a, b) => a + b) / filteredX.length
+            : 0.0,
         sd1: 0.0,
         sd2: 0.0,
         ellipseX: [],
@@ -156,14 +166,16 @@ class WindowAnalysisService {
     for (final d in diffXy) {
       varDiff += math.pow(d - mDiff, 2);
     }
-    final sd1 = (math.sqrt(varDiff / (count > 1 ? count - 1 : 1))) / math.sqrt(2);
+    final sd1 =
+        (math.sqrt(varDiff / (count > 1 ? count - 1 : 1))) / math.sqrt(2);
 
     final mSum = sumXy.reduce((a, b) => a + b) / count;
     double varSum = 0.0;
     for (final s in sumXy) {
       varSum += math.pow(s - mSum, 2);
     }
-    final sd2 = (math.sqrt(varSum / (count > 1 ? count - 1 : 1))) / math.sqrt(2);
+    final sd2 =
+        (math.sqrt(varSum / (count > 1 ? count - 1 : 1))) / math.sqrt(2);
 
     // 95% confidence ellipse geometry
     final a = 2.0 * sd2;
@@ -255,17 +267,19 @@ class WindowAnalysisService {
 
       final domain = domainMap[metricKey] ?? 'General';
 
-      summary.add(FeatureSummaryRow(
-        domain: domain,
-        metric: metricKey,
-        mean: _round2(mean),
-        sd: _round2(sd),
-        median: _round2(med),
-        iqr: _round2(iqr),
-        min: _round2(minVal),
-        max: _round2(maxVal),
-        count: n,
-      ));
+      summary.add(
+        FeatureSummaryRow(
+          domain: domain,
+          metric: metricKey,
+          mean: _round2(mean),
+          sd: _round2(sd),
+          median: _round2(med),
+          iqr: _round2(iqr),
+          min: _round2(minVal),
+          max: _round2(maxVal),
+          count: n,
+        ),
+      );
     }
 
     int domainOrder(String d) {

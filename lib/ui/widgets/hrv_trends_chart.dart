@@ -1,3 +1,4 @@
+import 'metric_picker.dart';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -47,8 +48,24 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
 
   static const Map<String, List<String>> _domainMetrics = {
     'Vitals & Activity': ['Skin_Temperature', 'Activity_Motion'],
-    'Time Domain': ['MeanHR', 'MeanNN', 'SDNN', 'RMSSD', 'pNN50', 'pNN20', 'CVNN'],
-    'Frequency Domain': ['LF', 'HF', 'LF_HF', 'LFn', 'HFn', 'VLF', 'Total_Power'],
+    'Time Domain': [
+      'MeanHR',
+      'MeanNN',
+      'SDNN',
+      'RMSSD',
+      'pNN50',
+      'pNN20',
+      'CVNN',
+    ],
+    'Frequency Domain': [
+      'LF',
+      'HF',
+      'LF_HF',
+      'LFn',
+      'HFn',
+      'VLF',
+      'Total_Power',
+    ],
     'Non-Linear': ['SD1', 'SD2', 'SD1_SD2', 'CSI', 'CVI', 'SampEn'],
     'Morphology': [
       'Morphology_Quality',
@@ -61,18 +78,19 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
     ],
   };
 
-  double get _totalStartS =>
-      widget.hrvResult.timestamps.isNotEmpty ? widget.hrvResult.timestamps.first : 0.0;
-  double get _totalEndS =>
-      widget.hrvResult.timestamps.isNotEmpty ? widget.hrvResult.timestamps.last : 1.0;
+  double get _totalStartS => widget.hrvResult.timestamps.isNotEmpty
+      ? widget.hrvResult.timestamps.first
+      : 0.0;
+  double get _totalEndS => widget.hrvResult.timestamps.isNotEmpty
+      ? widget.hrvResult.timestamps.last
+      : 1.0;
   double get _totalDurationS => math.max(_totalEndS - _totalStartS, 1.0);
 
   double get _currentStartS => _visibleStartS ?? _totalStartS;
   double get _currentEndS => _visibleEndS ?? _totalEndS;
   double get _currentSpanS => math.max(_currentEndS - _currentStartS, 10.0);
 
-  bool get _isTimeZoomed =>
-      _visibleStartS != null || _visibleEndS != null;
+  bool get _isTimeZoomed => _visibleStartS != null || _visibleEndS != null;
 
   bool get _isZoomed =>
       _isTimeZoomed ||
@@ -170,166 +188,84 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
     });
   }
 
-  List<DropdownMenuItem<String>> _buildMetricDropdownItems({required bool isOverlay}) {
-    final items = <DropdownMenuItem<String>>[];
-
-    if (isOverlay) {
-      items.add(
-        const DropdownMenuItem<String>(
-          value: 'none',
-          child: Text('None (Single Metric)', style: TextStyle(color: Colors.white54, fontSize: 13)),
-        ),
-      );
+  Future<void> _chooseMetric(bool overlay) async {
+    final known = _domainMetrics.values.expand((m) => m).toSet();
+    final groups = <String, List<String>>{
+      for (final group in _domainMetrics.entries)
+        group.key: group.value
+            .where(widget.hrvResult.metrics.containsKey)
+            .toList(),
+      'Other metrics': widget.hrvResult.metrics.keys
+          .where((m) => !known.contains(m))
+          .toList(),
+    };
+    final value = await pickMetric(
+      context,
+      groups,
+      overlay ? _metric2 : _metric1,
+      allowNone: overlay,
+    );
+    if (value != null && mounted) {
+      setState(() {
+        if (overlay) {
+          _metric2 = value;
+        } else {
+          _metric1 = value;
+        }
+      });
     }
+  }
 
-    for (final entry in _domainMetrics.entries) {
-      final available = entry.value.where((m) => widget.hrvResult.metrics.containsKey(m)).toList();
-      if (available.isEmpty) continue;
-
-      items.add(
-        DropdownMenuItem<String>(
-          enabled: false,
-          value: '__cat_${entry.key}__',
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              '— ${entry.key.toUpperCase()} —',
-              style: TextStyle(
-                color: isOverlay ? SensioTheme.rejectNoise : SensioTheme.accent,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-                letterSpacing: 1.1,
-              ),
+  Widget _selector(bool overlay) {
+    final metric = overlay ? _metric2 : _metric1;
+    return OutlinedButton(
+      onPressed: () => _chooseMetric(overlay),
+      child: Row(
+        children: [
+          Icon(
+            Icons.circle,
+            size: 8,
+            color: overlay ? SensioTheme.rejectNoise : SensioTheme.accent,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  overlay ? 'Overlay · right axis' : 'Primary · left axis',
+                  style: const TextStyle(fontSize: 11, color: Colors.white60),
+                ),
+                Text(
+                  metric == 'none' ? 'None' : metric.replaceAll('_', ' '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
-        ),
-      );
-
-      for (final metric in available) {
-        String label = metric;
-        if (metric == 'Skin_Temperature') label = 'Skin Temperature (°C)';
-        if (metric == 'Activity_Motion') label = 'Activity / Motion';
-
-        items.add(
-          DropdownMenuItem<String>(
-            value: metric,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 10),
-              child: Text(
-                label,
-                style: const TextStyle(fontSize: 13, color: Colors.white),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    return items;
+          const Icon(Icons.unfold_more, size: 18),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final values1 = widget.hrvResult.metrics[_metric1] ?? [];
-    final values2 = (_metric2 != 'none') ? (widget.hrvResult.metrics[_metric2] ?? []) : <double>[];
+    final values2 = (_metric2 != 'none')
+        ? (widget.hrvResult.metrics[_metric2] ?? [])
+        : <double>[];
 
     return Column(
       children: [
-        // 1. Metric Selectors Row: Primary Feature & Overlay Feature
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: SensioTheme.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: SensioTheme.border.withValues(alpha: 0.4)),
-          ),
-          child: Row(
-            children: [
-              // Feature 1 (Primary / Left Axis, Cyan)
-              Expanded(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 9,
-                      height: 9,
-                      decoration: const BoxDecoration(
-                        color: SensioTheme.accent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Primary (Left):',
-                      style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _metric1,
-                          isExpanded: true,
-                          dropdownColor: SensioTheme.surface,
-                          style: const TextStyle(color: SensioTheme.accent, fontWeight: FontWeight.bold, fontSize: 12),
-                          items: _buildMetricDropdownItems(isOverlay: false),
-                          onChanged: (newVal) {
-                            if (newVal != null && !newVal.startsWith('__cat_')) {
-                              setState(() => _metric1 = newVal);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 12),
-              Container(width: 1, height: 24, color: SensioTheme.border.withValues(alpha: 0.5)),
-              const SizedBox(width: 12),
-
-              // Feature 2 (Secondary / Overlay / Right Axis, Amber)
-              Expanded(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 9,
-                      height: 9,
-                      decoration: BoxDecoration(
-                        color: _metric2 != 'none' ? SensioTheme.rejectNoise : Colors.white30,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Overlay (Right):',
-                      style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _metric2,
-                          isExpanded: true,
-                          dropdownColor: SensioTheme.surface,
-                          style: TextStyle(
-                            color: _metric2 != 'none' ? SensioTheme.rejectNoise : Colors.white60,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                          items: _buildMetricDropdownItems(isOverlay: true),
-                          onChanged: (newVal) {
-                            if (newVal != null && !newVal.startsWith('__cat_')) {
-                              setState(() => _metric2 = newVal);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        Row(
+          children: [
+            Expanded(child: _selector(false)),
+            const SizedBox(width: 8),
+            Expanded(child: _selector(true)),
+          ],
         ),
         const SizedBox(height: 6),
 
@@ -339,7 +275,9 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
           decoration: BoxDecoration(
             color: const Color(0xFF131C2E),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: SensioTheme.border.withValues(alpha: 0.3)),
+            border: Border.all(
+              color: SensioTheme.border.withValues(alpha: 0.3),
+            ),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -350,7 +288,10 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                 children: [
                   const Icon(Icons.schedule, size: 14, color: Colors.white54),
                   const SizedBox(width: 4),
-                  const Text('Time Zoom:', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                  const Text(
+                    'Time Zoom:',
+                    style: TextStyle(color: Colors.white60, fontSize: 11),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.remove, size: 14),
                     color: Colors.white70,
@@ -376,28 +317,42 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                     {'label': 'All', 'sec': _totalDurationS},
                   ].map((preset) {
                     final sec = preset['sec'] as double;
-                    final isSel = (_currentSpanS - sec).abs() < 60.0 ||
-                        (sec == _totalDurationS && _visibleStartS == null && _visibleEndS == null);
+                    final isSel =
+                        (_currentSpanS - sec).abs() < 60.0 ||
+                        (sec == _totalDurationS &&
+                            _visibleStartS == null &&
+                            _visibleEndS == null);
                     return Padding(
                       padding: const EdgeInsets.only(left: 3),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(4),
                         onTap: () => _setTimePreset(sec),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSel ? SensioTheme.accent.withValues(alpha: 0.25) : Colors.transparent,
+                            color: isSel
+                                ? SensioTheme.accent.withValues(alpha: 0.25)
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: isSel ? SensioTheme.accent : SensioTheme.border.withValues(alpha: 0.3),
+                              color: isSel
+                                  ? SensioTheme.accent
+                                  : SensioTheme.border.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Text(
                             preset['label'] as String,
                             style: TextStyle(
-                              color: isSel ? SensioTheme.accent : Colors.white70,
+                              color: isSel
+                                  ? SensioTheme.accent
+                                  : Colors.white70,
                               fontSize: 10,
-                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSel
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -412,7 +367,10 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                 children: [
                   const Icon(Icons.height, size: 14, color: Colors.white54),
                   const SizedBox(width: 4),
-                  const Text('Y-Axis:', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                  const Text(
+                    'Y-Axis:',
+                    style: TextStyle(color: Colors.white60, fontSize: 11),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.remove, size: 14),
                     color: Colors.white70,
@@ -438,20 +396,31 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                         borderRadius: BorderRadius.circular(4),
                         onTap: () => setState(() => _verticalGain = preset),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSel ? SensioTheme.accent.withValues(alpha: 0.25) : Colors.transparent,
+                            color: isSel
+                                ? SensioTheme.accent.withValues(alpha: 0.25)
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: isSel ? SensioTheme.accent : SensioTheme.border.withValues(alpha: 0.3),
+                              color: isSel
+                                  ? SensioTheme.accent
+                                  : SensioTheme.border.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Text(
                             '${preset.toInt()}x',
                             style: TextStyle(
-                              color: isSel ? SensioTheme.accent : Colors.white70,
+                              color: isSel
+                                  ? SensioTheme.accent
+                                  : Colors.white70,
                               fontSize: 10,
-                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSel
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -464,12 +433,21 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: SensioTheme.surface,
                         foregroundColor: SensioTheme.accent,
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         minimumSize: Size.zero,
-                        side: const BorderSide(color: SensioTheme.accent, width: 0.8),
+                        side: const BorderSide(
+                          color: SensioTheme.accent,
+                          width: 0.8,
+                        ),
                       ),
                       icon: const Icon(Icons.refresh, size: 11),
-                      label: const Text('Reset', style: TextStyle(fontSize: 10)),
+                      label: const Text(
+                        'Reset',
+                        style: TextStyle(fontSize: 10),
+                      ),
                       onPressed: _resetZoom,
                     ),
                   ],
@@ -490,10 +468,7 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
               } else {
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    timeZoomRow,
-                    yZoomRow,
-                  ],
+                  children: [timeZoomRow, yZoomRow],
                 );
               }
             },
@@ -509,12 +484,18 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
             decoration: BoxDecoration(
               color: const Color(0xFF0F172A),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: SensioTheme.border.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: SensioTheme.border.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.chevron_left, size: 18, color: Colors.white70),
+                  icon: const Icon(
+                    Icons.chevron_left,
+                    size: 18,
+                    color: Colors.white70,
+                  ),
                   tooltip: 'Scroll back in time',
                   padding: const EdgeInsets.all(2),
                   constraints: const BoxConstraints(),
@@ -524,11 +505,15 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                   child: SliderTheme(
                     data: SliderThemeData(
                       trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 6,
+                      ),
                       activeTrackColor: SensioTheme.accent,
                       inactiveTrackColor: const Color(0xFF1E293B),
                       thumbColor: Colors.white,
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 12,
+                      ),
                     ),
                     child: Slider(
                       value: _currentStartS.clamp(
@@ -547,7 +532,11 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.chevron_right, size: 18, color: Colors.white70),
+                  icon: const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: Colors.white70,
+                  ),
                   tooltip: 'Scroll forward in time',
                   padding: const EdgeInsets.all(2),
                   constraints: const BoxConstraints(),
@@ -567,8 +556,7 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
           ),
 
         // 4. Interactive Inspection Banner (When a point is tapped/clicked)
-        if (_inspectedTs != null)
-          _buildInspectionBanner(values1, values2),
+        if (_inspectedTs != null) _buildInspectionBanner(values1, values2),
 
         // 5. Interactive Trend Lines Canvas (with Drag-to-Scroll, Pinch Zoom, Tap-to-Inspect)
         Expanded(
@@ -576,14 +564,17 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
             decoration: BoxDecoration(
               color: const Color(0xFF090D16),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: SensioTheme.border.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: SensioTheme.border.withValues(alpha: 0.4),
+              ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final chartLeft = 55.0;
-                  final chartRight = constraints.maxWidth - (_metric2 != 'none' ? 55.0 : 20.0);
+                  final chartRight =
+                      constraints.maxWidth - (_metric2 != 'none' ? 55.0 : 20.0);
                   final chartWidth = chartRight - chartLeft;
 
                   return Listener(
@@ -611,12 +602,20 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                       },
                       onScaleUpdate: (details) {
                         // Horizontal Pinch: Scale Time
-                        if (details.horizontalScale != 1.0 && _baseStartS != null && _baseEndS != null) {
+                        if (details.horizontalScale != 1.0 &&
+                            _baseStartS != null &&
+                            _baseEndS != null) {
                           final baseSpan = _baseEndS! - _baseStartS!;
-                          final focalRatio = ((details.localFocalPoint.dx - chartLeft) / chartWidth).clamp(0.0, 1.0);
-                          final newSpan = (baseSpan / details.horizontalScale).clamp(15.0, _totalDurationS);
+                          final focalRatio =
+                              ((details.localFocalPoint.dx - chartLeft) /
+                                      chartWidth)
+                                  .clamp(0.0, 1.0);
+                          final newSpan = (baseSpan / details.horizontalScale)
+                              .clamp(15.0, _totalDurationS);
 
-                          var newStart = (_baseStartS! + baseSpan * focalRatio) - newSpan * focalRatio;
+                          var newStart =
+                              (_baseStartS! + baseSpan * focalRatio) -
+                              newSpan * focalRatio;
                           var newEnd = newStart + newSpan;
                           if (newStart < _totalStartS) {
                             newStart = _totalStartS;
@@ -635,29 +634,44 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                         // Vertical Pinch: Scale Amplitude
                         if (details.verticalScale != 1.0) {
                           setState(() {
-                            _verticalGain = (_baseGain * details.verticalScale).clamp(0.4, 15.0);
+                            _verticalGain = (_baseGain * details.verticalScale)
+                                .clamp(0.4, 15.0);
                           });
                         }
 
                         // 1-finger / Mouse Drag: Smoothly Pan Time & Vertical Amplitude
                         if (details.scale == 1.0) {
-                          if (details.focalPointDelta.dx != 0.0 && chartWidth > 0) {
-                            final deltaS = -(details.focalPointDelta.dx / chartWidth) * _currentSpanS;
+                          if (details.focalPointDelta.dx != 0.0 &&
+                              chartWidth > 0) {
+                            final deltaS =
+                                -(details.focalPointDelta.dx / chartWidth) *
+                                _currentSpanS;
                             _panTime(deltaS);
                           }
                           if (details.focalPointDelta.dy != 0.0) {
                             setState(() {
-                              _verticalPanFraction = (_verticalPanFraction + details.focalPointDelta.dy / 250.0).clamp(-1.0, 1.0);
+                              _verticalPanFraction =
+                                  (_verticalPanFraction +
+                                          details.focalPointDelta.dy / 250.0)
+                                      .clamp(-1.0, 1.0);
                             });
                           }
                         }
                       },
                       onTapUp: (details) {
                         // Tapping selects/inspects point without forcing a tab navigation!
-                        if (chartWidth <= 0 || widget.hrvResult.timestamps.isEmpty) return;
-                        final tapX = details.localPosition.dx.clamp(chartLeft, chartRight);
+                        if (chartWidth <= 0 ||
+                            widget.hrvResult.timestamps.isEmpty) {
+                          return;
+                        }
+                        final tapX = details.localPosition.dx.clamp(
+                          chartLeft,
+                          chartRight,
+                        );
                         final frac = (tapX - chartLeft) / chartWidth;
-                        final selectedTs = _currentStartS + frac * (_currentEndS - _currentStartS);
+                        final selectedTs =
+                            _currentStartS +
+                            frac * (_currentEndS - _currentStartS);
 
                         setState(() {
                           _inspectedTs = selectedTs;
@@ -732,18 +746,31 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
           const SizedBox(width: 4),
           Text(
             timeStr,
-            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
+            ),
           ),
           const SizedBox(width: 10),
           Text(
             '$_metric1: ${val1.isFinite ? (_metric1 == 'Skin_Temperature' ? '${val1.toStringAsFixed(2)} °C' : val1.toStringAsFixed(2)) : '-'}',
-            style: const TextStyle(color: SensioTheme.accent, fontSize: 11, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: SensioTheme.accent,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           if (_metric2 != 'none') ...[
             const SizedBox(width: 10),
             Text(
               '$_metric2: ${val2.isFinite ? (_metric2 == 'Skin_Temperature' ? '${val2.toStringAsFixed(2)} °C' : val2.toStringAsFixed(2)) : '-'}',
-              style: const TextStyle(color: SensioTheme.rejectNoise, fontSize: 11, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: SensioTheme.rejectNoise,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
           const Spacer(),
@@ -757,7 +784,10 @@ class _HrvTrendsChartState extends State<HrvTrendsChart> {
                 minimumSize: Size.zero,
               ),
               icon: const Icon(Icons.open_in_new, size: 11),
-              label: const Text('View in Waveform', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'View in Waveform',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+              ),
               onPressed: () => widget.onJumpToWaveform!(ts),
             ),
             const SizedBox(width: 6),
@@ -847,7 +877,10 @@ class _DualTrendChartPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: size.width - 32);
-      tp.paint(canvas, Offset((size.width - tp.width) / 2, (size.height - tp.height) / 2));
+      tp.paint(
+        canvas,
+        Offset((size.width - tp.width) / 2, (size.height - tp.height) / 2),
+      );
       return;
     }
 
@@ -896,7 +929,11 @@ class _DualTrendChartPainter extends CustomPainter {
     const numYDivisions = 4;
     for (int i = 0; i <= numYDivisions; i++) {
       final y = topMargin + plotHeight * (i / numYDivisions);
-      canvas.drawLine(Offset(leftMargin, y), Offset(size.width - rightMargin, y), gridPaint);
+      canvas.drawLine(
+        Offset(leftMargin, y),
+        Offset(size.width - rightMargin, y),
+        gridPaint,
+      );
 
       // Metric 1 Y-axis labels (Left Axis, Cyan)
       final val1 = upper1 - (i / numYDivisions) * range1;
@@ -904,7 +941,11 @@ class _DualTrendChartPainter extends CustomPainter {
       final tp1 = TextPainter(
         text: TextSpan(
           text: val1Str,
-          style: const TextStyle(color: SensioTheme.accent, fontSize: 10, fontFamily: 'monospace'),
+          style: const TextStyle(
+            color: SensioTheme.accent,
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -917,11 +958,18 @@ class _DualTrendChartPainter extends CustomPainter {
         final tp2 = TextPainter(
           text: TextSpan(
             text: val2Str,
-            style: const TextStyle(color: SensioTheme.rejectNoise, fontSize: 10, fontFamily: 'monospace'),
+            style: const TextStyle(
+              color: SensioTheme.rejectNoise,
+              fontSize: 10,
+              fontFamily: 'monospace',
+            ),
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        tp2.paint(canvas, Offset(size.width - rightMargin + 6, y - tp2.height / 2));
+        tp2.paint(
+          canvas,
+          Offset(size.width - rightMargin + 6, y - tp2.height / 2),
+        );
       }
     }
 
@@ -998,7 +1046,11 @@ class _DualTrendChartPainter extends CustomPainter {
 
       // Vertical dashed line
       for (double dy = topMargin; dy < topMargin + plotHeight; dy += 8) {
-        canvas.drawLine(Offset(cursorX, dy), Offset(cursorX, math.min(dy + 4, topMargin + plotHeight)), cursorPaint);
+        canvas.drawLine(
+          Offset(cursorX, dy),
+          Offset(cursorX, math.min(dy + 4, topMargin + plotHeight)),
+          cursorPaint,
+        );
       }
     }
 
@@ -1009,7 +1061,12 @@ class _DualTrendChartPainter extends CustomPainter {
       final x = leftMargin + frac * plotWidth;
       final ts = tMin + frac * tRange;
 
-      final includeDate = showClockTime && (tRange > 3600.0 * 12.0 || (sessionStart != null && sessionStart!.day != sessionStart!.add(Duration(seconds: ts.round())).day));
+      final includeDate =
+          showClockTime &&
+          (tRange > 3600.0 * 12.0 ||
+              (sessionStart != null &&
+                  sessionStart!.day !=
+                      sessionStart!.add(Duration(seconds: ts.round())).day));
 
       final timeStr = TimeFormatter.formatSeconds(
         ts,
@@ -1023,11 +1080,18 @@ class _DualTrendChartPainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: timeStr,
-          style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'monospace'),
+          style: const TextStyle(
+            color: Colors.white38,
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset(x - tp.width / 2, size.height - bottomMargin + 6));
+      tp.paint(
+        canvas,
+        Offset(x - tp.width / 2, size.height - bottomMargin + 6),
+      );
     }
   }
 
@@ -1048,14 +1112,22 @@ class _DualTrendChartPainter extends CustomPainter {
     required Paint dotPaint,
   }) {
     canvas.save();
-    canvas.clipRect(Rect.fromLTWH(leftMargin - 2, topMargin - 2, plotWidth + 4, plotHeight + 4));
+    canvas.clipRect(
+      Rect.fromLTWH(
+        leftMargin - 2,
+        topMargin - 2,
+        plotWidth + 4,
+        plotHeight + 4,
+      ),
+    );
 
     Path? path;
     int? lastIdx;
 
     for (final i in validPoints) {
       final x = leftMargin + ((timestamps[i] - tMin) / tRange) * plotWidth;
-      final y = topMargin + plotHeight - ((values[i] - lower) / range) * plotHeight;
+      final y =
+          topMargin + plotHeight - ((values[i] - lower) / range) * plotHeight;
 
       canvas.drawCircle(Offset(x, y), 2.8, dotPaint);
 
@@ -1077,12 +1149,21 @@ class _DualTrendChartPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawLegend(Canvas canvas, Size size, double leftMargin, bool hasSecondary) {
+  void _drawLegend(
+    Canvas canvas,
+    Size size,
+    double leftMargin,
+    bool hasSecondary,
+  ) {
     final text1 = '● $metric1 (Left Axis)';
     final tp1 = TextPainter(
       text: TextSpan(
         text: text1,
-        style: const TextStyle(color: SensioTheme.accent, fontSize: 11, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+          color: SensioTheme.accent,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -1093,7 +1174,11 @@ class _DualTrendChartPainter extends CustomPainter {
       final tp2 = TextPainter(
         text: TextSpan(
           text: text2,
-          style: const TextStyle(color: SensioTheme.rejectNoise, fontSize: 11, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: SensioTheme.rejectNoise,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -1101,15 +1186,23 @@ class _DualTrendChartPainter extends CustomPainter {
     }
 
     // Zoom Level badge on top right
-    final zoomStr = 'Zoom: ${((timestamps.last - timestamps.first) / (visibleEndS - visibleStartS)).toStringAsFixed(1)}x Time • ${verticalGain.toStringAsFixed(1)}x Y';
+    final zoomStr =
+        'Zoom: ${((timestamps.last - timestamps.first) / (visibleEndS - visibleStartS)).toStringAsFixed(1)}x Time • ${verticalGain.toStringAsFixed(1)}x Y';
     final tpZoom = TextPainter(
       text: TextSpan(
         text: zoomStr,
-        style: const TextStyle(color: Colors.white30, fontSize: 10, fontFamily: 'monospace'),
+        style: const TextStyle(
+          color: Colors.white30,
+          fontSize: 10,
+          fontFamily: 'monospace',
+        ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tpZoom.paint(canvas, Offset(size.width - (hasSecondary ? 55.0 : 20.0) - tpZoom.width, 8));
+    tpZoom.paint(
+      canvas,
+      Offset(size.width - (hasSecondary ? 55.0 : 20.0) - tpZoom.width, 8),
+    );
   }
 
   String _formatMetricVal(double v) {

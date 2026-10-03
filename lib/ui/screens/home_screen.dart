@@ -1,5 +1,9 @@
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
+import 'dart:math' as math;
+import '../widgets/recording_picker.dart';
+import '../../core/reporting/analysis_report.dart';
+import 'report_screen.dart';
+import 'comparison_screen.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../../core/models/ppg_models.dart';
@@ -15,7 +19,9 @@ import '../../core/services/csv_export_service.dart';
 import '../../core/services/window_analysis_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final SessionAnalysisResult? initialResult;
+  final String? initialPath;
+  const HomeScreen({super.key, this.initialResult, this.initialPath});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -45,6 +51,12 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _analysisResult = widget.initialResult;
+    _selectedPpgPath = widget.initialPath;
+    if (_analysisResult != null) {
+      _analysisWindowStartS = 0;
+      _analysisWindowEndS = _analysisResult!.totalDurationS;
+    }
   }
 
   @override
@@ -55,35 +67,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _pickFile() async {
     try {
-      if (Platform.isMacOS) {
-        try {
-          await FilePicker.skipEntitlementsChecks();
-        } catch (_) {}
-      }
-
-      FilePickerResult? res;
-      try {
-        // Android document providers do not consistently advertise CSV MIME types.
-        // Let the system picker show all documents there and validate the suffix
-        // after selection. Other platforms retain the more focused CSV filter.
-        res = await FilePicker.pickFiles(
-          type: Platform.isAndroid ? FileType.any : FileType.custom,
-          allowedExtensions: Platform.isAndroid ? null : const ['csv'],
-        );
-      } catch (_) {
-        res = await FilePicker.pickFiles(type: FileType.any);
-      }
-
-      if (res != null && res.files.isNotEmpty && res.files.first.path != null) {
-        final ppgPath = res.files.first.path!;
-        if (!ppgPath.toLowerCase().endsWith('.csv')) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Please select a CSV recording.')),
-            );
-          }
-          return;
-        }
+      final ppgPath = await pickRecording(context);
+      if (!mounted || ppgPath == null) return;
+      {
         final sigmotPath = PPGAnalysisService.findMatchingSigmot(ppgPath);
         setState(() {
           _selectedPpgPath = ppgPath;
@@ -115,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter the absolute path to a *_ppg_data.csv file:',
+              'Enter a SensIO CSV, Orbit .orb or .signal path:',
               style: TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -349,333 +335,138 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
+  ReportSession get _reportSession => ReportSession(
+    'Session A',
+    _selectedPpgPath == null
+        ? 'Recording'
+        : File(_selectedPpgPath!).uri.pathSegments.last,
+    _analysisResult!,
+  );
+
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final isPhone = size.shortestSide < 600;
-    final useCompactAppBar = isPhone;
-    final isPhoneLandscape = isPhone && size.width > size.height;
-
+    final compact = MediaQuery.sizeOf(context).shortestSide < 600;
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: isPhoneLandscape ? 44 : kToolbarHeight,
-        titleSpacing: 12,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: SensioTheme.accent.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.monitor_heart,
-                color: SensioTheme.accent,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 8),
             Flexible(
               child: Text(
-                useCompactAppBar
-                    ? 'CCS PPGStudio'
-                    : 'Sensio PPG Analysis Studio',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: useCompactAppBar ? 15 : 18,
-                ),
+                compact ? 'CCS PPGStudio' : 'Sensio PPG Analysis Studio',
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (_analysisResult?.pipelineMode == 'ipfm_kalman') ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withAlpha(60),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.blueAccent, width: 0.8),
+                ),
+                child: const Text(
+                  'IPFM+KF',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.lightBlueAccent,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
-          if (_analysisResult != null) ...[
-            if (useCompactAppBar) ...[
-              // Compact Clock/Elapsed toggle icon button for mobile
-              IconButton(
-                icon: Icon(
-                  _showClockTime ? Icons.access_time : Icons.timer_outlined,
-                  color: SensioTheme.accent,
-                  size: 20,
-                ),
-                tooltip: _showClockTime
-                    ? 'Clock Time (Tap for Elapsed)'
-                    : 'Elapsed Time (Tap for Clock)',
-                onPressed: () =>
-                    setState(() => _showClockTime = !_showClockTime),
-              ),
-            ] else ...[
-              // Desktop Segmented Toggle
-              Container(
-                decoration: BoxDecoration(
-                  color: SensioTheme.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: SensioTheme.border.withValues(alpha: 0.5),
+          IconButton(
+            tooltip: 'Open recording',
+            icon: const Icon(Icons.folder_open),
+            onPressed: _isAnalyzing ? null : _pickFile,
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Reports, export and settings',
+            onSelected: (value) async {
+              if (value == 'settings') {
+                await showRecordingSettings(
+                  context,
+                  onSettingsChanged: () {
+                    if (_selectedPpgPath != null) _runAnalysis();
+                  },
+                );
+              } else if (value == 'toggle_pipeline') {
+                if (_analysisResult == null) return;
+                final nextMode = _analysisResult!.pipelineMode == 'ipfm_kalman'
+                    ? 'standard'
+                    : 'ipfm_kalman';
+                setState(() {
+                  _analysisResult = PPGAnalysisService.applyPipeline(
+                    _analysisResult!,
+                    nextMode,
+                  );
+                });
+              } else if (value == 'clock') {
+                setState(() => _showClockTime = !_showClockTime);
+              } else if (value == 'pdf') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ReportScreen(sessions: [_reportSession]),
+                  ),
+                );
+              } else if (value == 'compare') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ComparisonScreen(first: _reportSession),
+                  ),
+                );
+              } else if (value == 'timeseries' || value == 'summary') {
+                await _quickExportCsv(isTimeSeries: value == 'timeseries');
+              }
+            },
+            itemBuilder: (_) => [
+              if (_analysisResult != null) ...[
+                PopupMenuItem(
+                  value: 'toggle_pipeline',
+                  child: Text(
+                    _analysisResult!.pipelineMode == 'ipfm_kalman'
+                        ? 'Switch to Standard Pipeline'
+                        : 'Switch to IPFM+Kalman Pipeline',
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(7),
-                      ),
-                      onTap: () => setState(() => _showClockTime = false),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        color: !_showClockTime
-                            ? SensioTheme.accent.withValues(alpha: 0.2)
-                            : Colors.transparent,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.timer_outlined,
-                              size: 14,
-                              color: !_showClockTime
-                                  ? SensioTheme.accent
-                                  : Colors.white60,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Elapsed',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: !_showClockTime
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: !_showClockTime
-                                    ? SensioTheme.accent
-                                    : Colors.white60,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: SensioTheme.border.withValues(alpha: 0.4),
-                    ),
-                    InkWell(
-                      borderRadius: const BorderRadius.horizontal(
-                        right: Radius.circular(7),
-                      ),
-                      onTap: () => setState(() => _showClockTime = true),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        color: _showClockTime
-                            ? SensioTheme.accent.withValues(alpha: 0.2)
-                            : Colors.transparent,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              size: 14,
-                              color: _showClockTime
-                                  ? SensioTheme.accent
-                                  : Colors.white60,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Clock Time',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: _showClockTime
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: _showClockTime
-                                    ? SensioTheme.accent
-                                    : Colors.white60,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                const PopupMenuItem(
+                  value: 'pdf',
+                  child: Text('Create PDF report'),
                 ),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ],
-
-          // Dedicated File Open Button (ALWAYS visible and tappable!)
-          if (useCompactAppBar) ...[
-            IconButton(
-              icon: const Icon(
-                Icons.folder_open,
-                color: SensioTheme.accent,
-                size: 22,
-              ),
-              tooltip: 'Open PPG CSV Recording',
-              onPressed: _pickFile,
-            ),
-          ] else ...[
-            if (_selectedPpgPath != null) ...[
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  side: const BorderSide(color: SensioTheme.border),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
+                const PopupMenuItem(
+                  value: 'compare',
+                  child: Text('Compare two recordings'),
                 ),
-                icon: const Icon(Icons.folder_open, size: 16),
-                label: Text(
-                  File(_selectedPpgPath!).uri.pathSegments.last,
-                  style: const TextStyle(fontSize: 12),
-                ),
-                onPressed: _pickFile,
-              ),
-              const SizedBox(width: 8),
-            ],
-          ],
-
-          // Export CSV Button
-          if (_analysisResult != null)
-            PopupMenuButton<String>(
-              tooltip: 'Export CSV Results',
-              color: SensioTheme.surface,
-              icon: useCompactAppBar
-                  ? const Icon(
-                      Icons.download,
-                      color: SensioTheme.accent,
-                      size: 20,
-                    )
-                  : null,
-              child: useCompactAppBar
-                  ? null
-                  : Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: SensioTheme.accent.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: SensioTheme.accent.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.download,
-                            size: 15,
-                            color: SensioTheme.accent,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Export CSV',
-                            style: TextStyle(
-                              color: SensioTheme.accent,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-              itemBuilder: (ctx) => [
                 const PopupMenuItem(
                   value: 'timeseries',
-                  child: Row(
-                    children: [
-                      Icon(Icons.timeline, size: 16, color: SensioTheme.accent),
-                      SizedBox(width: 8),
-                      Text(
-                        'Export Time-Series CSV (*.features.csv)',
-                        style: TextStyle(fontSize: 12, color: Colors.white),
-                      ),
-                    ],
-                  ),
+                  child: Text('Export feature time series CSV'),
                 ),
                 const PopupMenuItem(
                   value: 'summary',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.table_chart,
-                        size: 16,
-                        color: SensioTheme.ppgSignal,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Export Summary Stats CSV (*.summary.csv)',
-                        style: TextStyle(fontSize: 12, color: Colors.white),
-                      ),
-                    ],
-                  ),
+                  child: Text('Export summary CSV'),
                 ),
-                const PopupMenuItem(
-                  value: 'copy',
-                  child: Row(
-                    children: [
-                      Icon(Icons.copy, size: 16, color: Colors.white70),
-                      SizedBox(width: 8),
-                      Text(
-                        'Copy Time-Series to Clipboard',
-                        style: TextStyle(fontSize: 12, color: Colors.white),
-                      ),
-                    ],
+                PopupMenuItem(
+                  value: 'clock',
+                  child: Text(
+                    _showClockTime ? 'Show elapsed time' : 'Show clock time',
                   ),
                 ),
               ],
-              onSelected: (val) async {
-                final messenger = ScaffoldMessenger.of(context);
-                if (val == 'timeseries') {
-                  await _quickExportCsv(isTimeSeries: true);
-                } else if (val == 'summary') {
-                  await _quickExportCsv(isTimeSeries: false);
-                } else if (val == 'copy') {
-                  final csv = CsvExportService.generateTimeSeriesCsv(
-                    _analysisResult!,
-                  );
-                  await CsvExportService.copyToClipboard(csv);
-                  if (mounted) {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        backgroundColor: SensioTheme.accent,
-                        content: Text(
-                          'Time-series CSV copied to clipboard!',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-                }
-              },
-            ),
-          const SizedBox(width: 6),
+              const PopupMenuItem(
+                value: 'settings',
+                child: Text('Recording settings'),
+              ),
+            ],
+          ),
         ],
       ),
-      floatingActionButton: (_selectedPpgPath == null || isPhone)
-          ? FloatingActionButton.extended(
-              backgroundColor: SensioTheme.accent,
-              foregroundColor: Colors.black,
-              icon: const Icon(Icons.folder_open),
-              label: Text(
-                _selectedPpgPath == null ? 'Load PPG CSV' : 'Open CSV',
-              ),
-              onPressed: _pickFile,
-            )
-          : null,
-      body: _buildBody(),
+      body: SafeArea(child: _buildBody()),
     );
   }
 
@@ -771,12 +562,14 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             const SizedBox(height: 8),
             const Text(
-              'Select a Ring PPG CSV recording to compute high-precision HRV & morphology',
+              'Open a SensIO CSV or Orbit PPG recording',
               style: TextStyle(color: Colors.white38, fontSize: 13),
             ),
             const SizedBox(height: 24),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
@@ -789,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   icon: const Icon(Icons.folder_open),
                   label: const Text(
-                    'Select CSV File',
+                    'Open recording',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   onPressed: _pickFile,
@@ -816,63 +609,75 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     final size = MediaQuery.sizeOf(context);
-    final compactLandscape =
-        size.shortestSide < 600 && size.width > size.height;
 
-    return Column(
-      children: [
-        // KPI Quick Summary Bar
-        _buildKpiBar(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final minimumHeight = size.width < 600 ? 690.0 : 620.0;
+        return SingleChildScrollView(
+          child: SizedBox(
+            height: math.max(constraints.maxHeight, minimumHeight),
+            child: Column(
+              children: [
+                // KPI Quick Summary Bar
+                if (size.width < 900)
+                  ExpansionTile(
+                    title: Text(
+                      _selectedPpgPath == null
+                          ? 'Recording overview'
+                          : File(_selectedPpgPath!).uri.pathSegments.last,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    subtitle: Text(
+                      '${_analysisResult!.coveragePct.toStringAsFixed(1)}% accepted · ${(_analysisResult!.totalDurationS / 60).toStringAsFixed(0)} min · Tap for details',
+                    ),
+                    children: [
+                      SizedBox(
+                        height: 170,
+                        child: SingleChildScrollView(child: _buildKpiBar()),
+                      ),
+                    ],
+                  )
+                else
+                  _buildKpiBar(),
 
-        // Tab Navigation
-        TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          tabs: [
-            Tab(
-              icon: compactLandscape
-                  ? null
-                  : const Icon(Icons.show_chart, size: 18),
-              text: 'Waveform',
-            ),
-            Tab(
-              icon: compactLandscape
-                  ? null
-                  : const Icon(Icons.scatter_plot, size: 18),
-              text: 'HRV Dynamics',
-            ),
-            Tab(
-              icon: compactLandscape
-                  ? null
-                  : const Icon(Icons.table_chart, size: 18),
-              text: _windowStats != null
-                  ? 'Clinical Summary (Window)'
-                  : 'Clinical Summary',
-            ),
-            Tab(
-              icon: compactLandscape
-                  ? null
-                  : const Icon(Icons.dataset_outlined, size: 18),
-              text: 'CSV Explorer',
-            ),
-          ],
-        ),
+                // Tab Navigation
+                TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  tabs: [
+                    Tab(icon: null, text: 'Waveform'),
+                    Tab(icon: null, text: 'HRV Dynamics'),
+                    Tab(
+                      icon: null,
+                      text: _windowStats != null
+                          ? 'Clinical Summary (Window)'
+                          : 'Clinical Summary',
+                    ),
+                    Tab(icon: null, text: 'CSV Explorer'),
+                  ],
+                ),
 
-        // Tab Views
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildWaveformTab(),
-              _buildHrvDynamicsTab(),
-              _buildSummaryTab(),
-              _buildCsvExplorerTab(),
-            ],
+                // Tab Views
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildWaveformTab(),
+                      _buildHrvDynamicsTab(),
+                      _buildSummaryTab(),
+                      _buildCsvExplorerTab(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -1381,9 +1186,7 @@ class _HomeScreenState extends State<HomeScreen>
       padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isPhonePortrait =
-              constraints.maxWidth < 600 &&
-              constraints.maxHeight >= constraints.maxWidth;
+          final isPhonePortrait = constraints.maxWidth < 600;
           final isLandscape =
               constraints.maxHeight < 500 &&
               constraints.maxWidth > constraints.maxHeight;

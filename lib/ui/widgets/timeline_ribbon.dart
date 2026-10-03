@@ -52,7 +52,8 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
     // Determine session start time of day in seconds
     double startTodS = widget.t0SecondsOfDay;
     if (widget.sessionStart != null) {
-      startTodS = widget.sessionStart!.hour * 3600.0 +
+      startTodS =
+          widget.sessionStart!.hour * 3600.0 +
           widget.sessionStart!.minute * 60.0 +
           widget.sessionStart!.second.toDouble();
     }
@@ -87,7 +88,8 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
     // Determine session start time of day in seconds
     double startTodS = widget.t0SecondsOfDay;
     if (widget.sessionStart != null) {
-      startTodS = widget.sessionStart!.hour * 3600.0 +
+      startTodS =
+          widget.sessionStart!.hour * 3600.0 +
           widget.sessionStart!.minute * 60.0 +
           widget.sessionStart!.second.toDouble();
     }
@@ -106,7 +108,10 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
     } else if (startTodS < dayStartTod) {
       // Started in early morning before 06:00
       relStartS = dayStartTod - startTodS;
-      relEndS = (dayEndTod - startTodS).clamp(relStartS + 60.0, widget.totalDurationS);
+      relEndS = (dayEndTod - startTodS).clamp(
+        relStartS + 60.0,
+        widget.totalDurationS,
+      );
     } else {
       // Started late evening after 22:00 -> day begins next morning at 06:00
       relStartS = (24.0 * 3600.0 - startTodS) + dayStartTod;
@@ -123,7 +128,8 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
   Widget build(BuildContext context) {
     if (widget.totalDurationS <= 0) return const SizedBox.shrink();
 
-    final isSubWindowActive = widget.analysisStartS > 0.5 ||
+    final isSubWindowActive =
+        widget.analysisStartS > 0.5 ||
         widget.analysisEndS < (widget.totalDurationS - 0.5);
 
     final startLabel = TimeFormatter.formatSeconds(
@@ -156,7 +162,10 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
       includeDate: false,
     );
 
-    final winDurS = (widget.analysisEndS - widget.analysisStartS).clamp(0.0, widget.totalDurationS);
+    final winDurS = (widget.analysisEndS - widget.analysisStartS).clamp(
+      0.0,
+      widget.totalDurationS,
+    );
     final winDurHours = winDurS / 3600.0;
     final winDurText = winDurHours >= 1.0
         ? '${winDurHours.toStringAsFixed(1)}h'
@@ -169,7 +178,9 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
         // Preset bar & Active Window Status
         Padding(
           padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
               // Analysis Window Info Badge
               Container(
@@ -191,7 +202,9 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                     Icon(
                       isSubWindowActive ? Icons.filter_alt : Icons.crop_free,
                       size: 13,
-                      color: isSubWindowActive ? SensioTheme.accent : Colors.white60,
+                      color: isSubWindowActive
+                          ? SensioTheme.accent
+                          : Colors.white60,
                     ),
                     const SizedBox(width: 5),
                     Text(
@@ -200,8 +213,12 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                           : 'Full Session Window ($winDurText)',
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: isSubWindowActive ? FontWeight.bold : FontWeight.normal,
-                        color: isSubWindowActive ? Colors.white : Colors.white70,
+                        fontWeight: isSubWindowActive
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: isSubWindowActive
+                            ? Colors.white
+                            : Colors.white70,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -211,7 +228,10 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                         borderRadius: BorderRadius.circular(4),
                         onTap: () {
                           widget.onResetAnalysisWindow?.call();
-                          widget.onAnalysisWindowChanged(0.0, widget.totalDurationS);
+                          widget.onAnalysisWindowChanged(
+                            0.0,
+                            widget.totalDurationS,
+                          );
                         },
                         child: Container(
                           padding: const EdgeInsets.all(2),
@@ -219,19 +239,28 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                             color: Colors.white12,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Icon(Icons.close, size: 12, color: Colors.white),
+                          child: const Icon(
+                            Icons.close,
+                            size: 12,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 4),
               // Presets
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Text('Presets: ', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                  const Text(
+                    'Presets: ',
+                    style: TextStyle(color: Colors.white38, fontSize: 10),
+                  ),
                   _presetBtn('Full', () {
                     widget.onResetAnalysisWindow?.call();
                     widget.onAnalysisWindowChanged(0.0, widget.totalDurationS);
@@ -250,8 +279,10 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
         LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            final winStartFrac = (widget.analysisStartS / widget.totalDurationS).clamp(0.0, 1.0);
-            final winEndFrac = (widget.analysisEndS / widget.totalDurationS).clamp(0.0, 1.0);
+            final winStartFrac = (widget.analysisStartS / widget.totalDurationS)
+                .clamp(0.0, 1.0);
+            final winEndFrac = (widget.analysisEndS / widget.totalDurationS)
+                .clamp(0.0, 1.0);
 
             final leftHandleX = winStartFrac * width;
             final rightHandleX = winEndFrac * width;
@@ -274,12 +305,28 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                   // Inside window: drag entire span if near top/bottom, or seek waveform
                   _dragTarget = _HandleDragTarget.none;
                   final targetS = (mouseX / width) * widget.totalDurationS;
-                  widget.onSeek(targetS.clamp(0.0, (widget.totalDurationS - widget.windowDurationS).clamp(0.0, widget.totalDurationS)));
+                  widget.onSeek(
+                    targetS.clamp(
+                      0.0,
+                      (widget.totalDurationS - widget.windowDurationS).clamp(
+                        0.0,
+                        widget.totalDurationS,
+                      ),
+                    ),
+                  );
                 } else {
                   // Outside window: seek
                   _dragTarget = _HandleDragTarget.none;
                   final targetS = (mouseX / width) * widget.totalDurationS;
-                  widget.onSeek(targetS.clamp(0.0, (widget.totalDurationS - widget.windowDurationS).clamp(0.0, widget.totalDurationS)));
+                  widget.onSeek(
+                    targetS.clamp(
+                      0.0,
+                      (widget.totalDurationS - widget.windowDurationS).clamp(
+                        0.0,
+                        widget.totalDurationS,
+                      ),
+                    ),
+                  );
                 }
               },
               onHorizontalDragUpdate: (details) {
@@ -288,19 +335,42 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                 final deltaS = deltaFrac * widget.totalDurationS;
 
                 if (_dragTarget == _HandleDragTarget.startHandle) {
-                  final newStartS = (_dragInitStartS + deltaS).clamp(0.0, widget.analysisEndS - 10.0);
-                  widget.onAnalysisWindowChanged(newStartS, widget.analysisEndS);
+                  final newStartS = (_dragInitStartS + deltaS).clamp(
+                    0.0,
+                    widget.analysisEndS - 10.0,
+                  );
+                  widget.onAnalysisWindowChanged(
+                    newStartS,
+                    widget.analysisEndS,
+                  );
                 } else if (_dragTarget == _HandleDragTarget.endHandle) {
-                  final newEndS = (_dragInitEndS + deltaS).clamp(widget.analysisStartS + 10.0, widget.totalDurationS);
-                  widget.onAnalysisWindowChanged(widget.analysisStartS, newEndS);
+                  final newEndS = (_dragInitEndS + deltaS).clamp(
+                    widget.analysisStartS + 10.0,
+                    widget.totalDurationS,
+                  );
+                  widget.onAnalysisWindowChanged(
+                    widget.analysisStartS,
+                    newEndS,
+                  );
                 } else if (_dragTarget == _HandleDragTarget.windowSpan) {
                   final span = _dragInitEndS - _dragInitStartS;
-                  var newStart = (_dragInitStartS + deltaS).clamp(0.0, widget.totalDurationS - span);
+                  var newStart = (_dragInitStartS + deltaS).clamp(
+                    0.0,
+                    widget.totalDurationS - span,
+                  );
                   var newEnd = newStart + span;
                   widget.onAnalysisWindowChanged(newStart, newEnd);
                 } else {
                   final targetS = (mouseX / width) * widget.totalDurationS;
-                  widget.onSeek(targetS.clamp(0.0, (widget.totalDurationS - widget.windowDurationS).clamp(0.0, widget.totalDurationS)));
+                  widget.onSeek(
+                    targetS.clamp(
+                      0.0,
+                      (widget.totalDurationS - widget.windowDurationS).clamp(
+                        0.0,
+                        widget.totalDurationS,
+                      ),
+                    ),
+                  );
                 }
               },
               onHorizontalDragEnd: (_) {
@@ -309,9 +379,18 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
               onTapDown: (details) {
                 final tapX = details.localPosition.dx.clamp(0.0, width);
                 const hitMargin = 16.0;
-                if ((tapX - leftHandleX).abs() > hitMargin && (tapX - rightHandleX).abs() > hitMargin) {
+                if ((tapX - leftHandleX).abs() > hitMargin &&
+                    (tapX - rightHandleX).abs() > hitMargin) {
                   final targetS = (tapX / width) * widget.totalDurationS;
-                  widget.onSeek(targetS.clamp(0.0, (widget.totalDurationS - widget.windowDurationS).clamp(0.0, widget.totalDurationS)));
+                  widget.onSeek(
+                    targetS.clamp(
+                      0.0,
+                      (widget.totalDurationS - widget.windowDurationS).clamp(
+                        0.0,
+                        widget.totalDurationS,
+                      ),
+                    ),
+                  );
                 }
               },
               child: SizedBox(
@@ -329,7 +408,9 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                         decoration: BoxDecoration(
                           color: SensioTheme.surface,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: SensioTheme.border.withValues(alpha: 0.5)),
+                          border: Border.all(
+                            color: SensioTheme.border.withValues(alpha: 0.5),
+                          ),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: Stack(
@@ -338,18 +419,29 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: widget.segments.map((seg) {
-                                final fraction = (seg.durationS / widget.totalDurationS).clamp(0.0, 1.0);
+                                final fraction =
+                                    (seg.durationS / widget.totalDurationS)
+                                        .clamp(0.0, 1.0);
                                 Color segColor = SensioTheme.rejectNoise;
                                 if (seg.isGood) {
                                   segColor = SensioTheme.goodPulse;
-                                } else if (seg.description.toLowerCase().contains('dropout') ||
-                                    seg.description.toLowerCase().contains('defect') ||
-                                    seg.description.toLowerCase().contains('artifact')) {
+                                } else if (seg.description
+                                        .toLowerCase()
+                                        .contains('dropout') ||
+                                    seg.description.toLowerCase().contains(
+                                      'defect',
+                                    ) ||
+                                    seg.description.toLowerCase().contains(
+                                      'artifact',
+                                    )) {
                                   segColor = SensioTheme.badArtifact;
                                 }
 
                                 return Expanded(
-                                  flex: (fraction * 10000).round().clamp(1, 10000),
+                                  flex: (fraction * 10000).round().clamp(
+                                    1,
+                                    10000,
+                                  ),
                                   child: Container(
                                     color: segColor.withValues(alpha: 0.85),
                                   ),
@@ -359,13 +451,23 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
 
                             // Waveform zoom viewport indicator
                             Positioned(
-                              left: (widget.currentStartS / widget.totalDurationS) * width,
-                              width: ((widget.windowDurationS / widget.totalDurationS) * width).clamp(6.0, width),
+                              left:
+                                  (widget.currentStartS /
+                                      widget.totalDurationS) *
+                                  width,
+                              width:
+                                  ((widget.windowDurationS /
+                                              widget.totalDurationS) *
+                                          width)
+                                      .clamp(6.0, width),
                               top: 0,
                               bottom: 0,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.white, width: 2),
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
                                   color: Colors.white.withValues(alpha: 0.25),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
@@ -404,7 +506,9 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                                 decoration: BoxDecoration(
                                   border: Border.symmetric(
                                     horizontal: BorderSide(
-                                      color: isSubWindowActive ? SensioTheme.accent : Colors.transparent,
+                                      color: isSubWindowActive
+                                          ? SensioTheme.accent
+                                          : Colors.transparent,
                                       width: 2,
                                     ),
                                   ),
@@ -427,7 +531,9 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                           width: 10,
                           height: 36,
                           decoration: BoxDecoration(
-                            color: isSubWindowActive ? SensioTheme.accent : Colors.white70,
+                            color: isSubWindowActive
+                                ? SensioTheme.accent
+                                : Colors.white70,
                             borderRadius: BorderRadius.circular(4),
                             boxShadow: [
                               BoxShadow(
@@ -437,7 +543,11 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                               ),
                             ],
                           ),
-                          child: const Icon(Icons.drag_indicator, size: 10, color: Colors.black),
+                          child: const Icon(
+                            Icons.drag_indicator,
+                            size: 10,
+                            color: Colors.black,
+                          ),
                         ),
                       ),
                     ),
@@ -453,7 +563,9 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                           width: 10,
                           height: 36,
                           decoration: BoxDecoration(
-                            color: isSubWindowActive ? SensioTheme.accent : Colors.white70,
+                            color: isSubWindowActive
+                                ? SensioTheme.accent
+                                : Colors.white70,
                             borderRadius: BorderRadius.circular(4),
                             boxShadow: [
                               BoxShadow(
@@ -463,7 +575,11 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
                               ),
                             ],
                           ),
-                          child: const Icon(Icons.drag_indicator, size: 10, color: Colors.black),
+                          child: const Icon(
+                            Icons.drag_indicator,
+                            size: 10,
+                            color: Colors.black,
+                          ),
                         ),
                       ),
                     ),
@@ -479,11 +595,19 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
           children: [
             Text(
               startLabel,
-              style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'monospace'),
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 10,
+                fontFamily: 'monospace',
+              ),
             ),
             Text(
               endLabel,
-              style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'monospace'),
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 10,
+                fontFamily: 'monospace',
+              ),
             ),
           ],
         ),
@@ -491,17 +615,25 @@ class _TimelineRibbonState extends State<TimelineRibbon> {
     );
   }
 
-  Widget _presetBtn(String label, VoidCallback onTap, {bool isSelected = false}) {
+  Widget _presetBtn(
+    String label,
+    VoidCallback onTap, {
+    bool isSelected = false,
+  }) {
     return InkWell(
       borderRadius: BorderRadius.circular(4),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected ? SensioTheme.accent.withValues(alpha: 0.2) : SensioTheme.surface,
+          color: isSelected
+              ? SensioTheme.accent.withValues(alpha: 0.2)
+              : SensioTheme.surface,
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color: isSelected ? SensioTheme.accent : SensioTheme.border.withValues(alpha: 0.4),
+            color: isSelected
+                ? SensioTheme.accent
+                : SensioTheme.border.withValues(alpha: 0.4),
           ),
         ),
         child: Text(
