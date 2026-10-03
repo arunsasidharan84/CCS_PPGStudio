@@ -90,7 +90,10 @@ class PPGAnalysisService {
   static SessionAnalysisResult _isolateAnalyze(AnalysisRequest req) {
     final bindings = SensioNativeBindings.tryLoad();
     if (bindings == null) {
-      throw Exception('Failed to load native sensio_ppg_core library.');
+      final err = SensioNativeBindings.lastLoadError;
+      throw Exception(
+        'Failed to load native sensio_ppg_core library${err != null ? ' ($err)' : ''}.',
+      );
     }
 
     Directory? temporary;

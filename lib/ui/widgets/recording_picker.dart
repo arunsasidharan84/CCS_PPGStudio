@@ -68,10 +68,22 @@ Future<String?> pickRecording(BuildContext context) async {
                 )
               : ListView.builder(
                   itemCount: paths.length,
-                  itemBuilder: (_, i) => ListTile(
-                    title: Text(File(paths[i]).uri.pathSegments.last),
-                    onTap: () => Navigator.pop(ctx, paths[i]),
-                  ),
+                  itemBuilder: (_, i) {
+                    final fName = File(paths[i]).uri.pathSegments.last;
+                    final parent = File(paths[i]).parent.path;
+                    final isOrbit = RegExp(r'\.(orb|signal)$', caseSensitive: false).hasMatch(fName);
+                    String sub = 'Orbit PPG Recording';
+                    if (!isOrbit) {
+                      final hasSigmot = File('$parent/${fName.replaceAll("_ppg_data.csv", "_sigmot_data.csv")}').existsSync();
+                      final hasTemp = File('$parent/${fName.replaceAll("_ppg_data.csv", "_temperature_data.csv")}').existsSync();
+                      sub = 'SensIO • Sigmot: ${hasSigmot ? "✓" : "—"} | Temp: ${hasTemp ? "✓" : "—"}';
+                    }
+                    return ListTile(
+                      title: Text(fName),
+                      subtitle: Text(sub, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                      onTap: () => Navigator.pop(ctx, paths[i]),
+                    );
+                  },
                 ),
         ),
         actions: [
@@ -87,32 +99,165 @@ Future<String?> pickRecording(BuildContext context) async {
   try {
     result = await FilePicker.pickFiles(
       dialogTitle: mode == 'orbit'
-          ? 'Orbit PPG (.orb, .signal)'
-          : 'SensIO ($pattern)',
-      type: Platform.isAndroid ? FileType.any : FileType.custom,
-      allowedExtensions: Platform.isAndroid
-          ? null
-          : mode == 'orbit'
-          ? ['orb', 'signal']
-          : ['csv'],
+          ? 'Select Orbit PPG (.orb, .signal)'
+          : 'Select SensIO PPG file (and optional Sigmot/Temp files)',
+      type: FileType.custom,
+      allowedExtensions: mode == 'orbit' ? ['orb', 'signal'] : ['csv'],
+      allowMultiple: mode == 'sensio',
     );
   } catch (_) {
-    result = await FilePicker.pickFiles(type: FileType.any);
-  }
-  final path = result?.files.single.path;
-  if (path == null) return null;
-  final name = File(path).uri.pathSegments.last;
-  final valid = mode == 'orbit'
-      ? RegExp(r'\.(orb|signal)$', caseSensitive: false).hasMatch(name)
-      : matchesRecordingPattern(name, pattern);
-  if (!valid) {
-    throw FormatException(
-      mode == 'orbit'
-          ? 'Select an .orb or .signal recording.'
-          : 'The file does not match $pattern. You can change this filter in Settings.',
+    result = await FilePicker.pickFiles(
+      type: FileType.any,
+      allowMultiple: mode == 'sensio',
     );
   }
-  return path;
+
+  if (result == null || result.files.isEmpty) return null;
+
+  final files = result.files.where((f) => f.path != null).toList();
+  if (files.isEmpty) return null;
+
+  // If multiple files selected, find the primary PPG file
+  String? ppgPath;
+  final companionPaths = <String>[];
+
+  for (final f in files) {
+    final p = f.path!;
+    final name = File(p).uri.pathSegments.last;
+    if (mode == 'orbit') {
+      if (RegExp(r'\.(orb|signal)$', caseSensitive: false).hasMatch(name)) {
+        ppgPath = p;
+        break;
+      }
+    } else {
+      if (matchesRecordingPattern(name, pattern)) {
+        ppgPath = p;
+      } else if (name.endsWith('_sigmot_data.csv') ||
+          name.endsWith('_temperature_data.csv')) {
+        companionPaths.add(p);
+      }
+    }
+  }
+
+  // If no file strictly matched the PPG pattern, check if user picked a companion file alone
+  if (ppgPath == null) {
+    final firstPath = files.first.path!;
+    final firstName = File(firstPath).uri.pathSegments.last;
+
+    if (firstName.endsWith('_sigmot_data.csv') ||
+        firstName.endsWith('_temperature_data.csv')) {
+      final candidatePpgName = firstName.replaceAll(
+        RegExp(r'_(sigmot|temperature)_data\.csv$'),
+        '_ppg_data.csv',
+      );
+      final candidatePpg = File('${File(firstPath).parent.path}/$candidatePpgName');
+      if (candidatePpg.existsSync()) {
+        ppgPath = candidatePpg.path;
+      } else {
+        throw FormatException(
+          'Selected "$firstName" is a companion file. Please select the matching PPG file: "$candidatePpgName".',
+        );
+      }
+    } else {
+      final valid = mode == 'orbit'
+          ? RegExp(r'\.(orb|signal)$', caseSensitive: false).hasMatch(firstName)
+          : matchesRecordingPattern(firstName, pattern);
+      if (!valid) {
+        throw FormatException(
+          mode == 'orbit'
+              ? 'Select an .orb or .signal recording.'
+              : 'The file "$firstName" does not match $pattern. You can change this filter in Settings.',
+        );
+      }
+      ppgPath = firstPath;
+    }
+  }
+
+  // Copy any selected companion files to the same directory as the PPG file
+  final ppgDir = File(ppgPath).parent.path;
+  for (final cp in companionPaths) {
+    final cName = File(cp).uri.pathSegments.last;
+    final target = File('$ppgDir/$cName');
+    if (target.path != cp && !target.existsSync()) {
+      try {
+        await File(cp).copy(target.path);
+      } catch (_) {}
+    }
+  }
+
+  // If on mobile/isolated environment and companion files are still missing, prompt user
+  if (context.mounted && mode == 'sensio') {
+    await _promptAndImportMissingCompanions(context, ppgPath);
+  }
+
+  return ppgPath;
+}
+
+Future<void> _promptAndImportMissingCompanions(
+  BuildContext context,
+  String ppgPath,
+) async {
+  final ppgFile = File(ppgPath);
+  final dir = ppgFile.parent.path;
+  final name = ppgFile.uri.pathSegments.last;
+  if (!name.contains('_ppg_data.csv')) return;
+
+  final expectedSigmot = name.replaceAll('_ppg_data.csv', '_sigmot_data.csv');
+  final expectedTemp = name.replaceAll('_ppg_data.csv', '_temperature_data.csv');
+
+  final hasSigmot = File('$dir/$expectedSigmot').existsSync();
+  final hasTemp = File('$dir/$expectedTemp').existsSync();
+
+  if (hasSigmot && hasTemp) return;
+
+  final missingList = <String>[];
+  if (!hasSigmot) missingList.add('Sigmot / Motion');
+  if (!hasTemp) missingList.add('Temperature');
+
+  final shouldPick = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('SensIO Companion Files'),
+      content: Text(
+        'Selected PPG:\n$name\n\n'
+        'Companion files (${missingList.join(', ')}) were not found in the same folder.\n\n'
+        'Would you like to select them for motion and temperature tracking?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Analyze PPG Only'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Select Companion Files'),
+        ),
+      ],
+    ),
+  );
+
+  if (shouldPick != true) return;
+
+  try {
+    final companions = await FilePicker.pickFiles(
+      dialogTitle: 'Select matching Sigmot and Temperature CSVs',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      allowMultiple: true,
+    );
+
+    if (companions == null || companions.files.isEmpty) return;
+
+    for (final f in companions.files) {
+      if (f.path == null) continue;
+      final cName = File(f.path!).uri.pathSegments.last;
+      if (cName.endsWith('_sigmot_data.csv') ||
+          cName.endsWith('_temperature_data.csv')) {
+        final target = File('$dir/$cName');
+        await File(f.path!).copy(target.path);
+      }
+    }
+  } catch (_) {}
 }
 
 Future<void> showRecordingSettings(

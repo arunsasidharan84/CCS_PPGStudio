@@ -25,66 +25,120 @@ class SensioNativeBindings {
   _processFile;
   final void Function(Pointer<Utf8>) _freeString;
 
+  static Object? lastLoadError;
+
   static SensioNativeBindings? tryLoad() {
-    try {
-      if (Platform.isAndroid) {
+    lastLoadError = null;
+
+    if (Platform.isAndroid) {
+      try {
         final lib = DynamicLibrary.open('libsensio_ppg_core.so');
         return SensioNativeBindings._(lib);
+      } catch (e) {
+        lastLoadError = e;
+        try {
+          return SensioNativeBindings._(DynamicLibrary.process());
+        } catch (_) {}
       }
-      if (Platform.isIOS) {
-        return SensioNativeBindings._(DynamicLibrary.process());
-      }
-      if (Platform.isMacOS) {
-        final bundleFrameworksPath =
-            '${File(Platform.resolvedExecutable).parent.parent.path}/Frameworks/libsensio_ppg_core.dylib';
-        final paths = [
-          bundleFrameworksPath,
-          'bin/libsensio_ppg_core.dylib',
-          'libsensio_ppg_core.dylib',
-          'rust/target/release/libsensio_ppg_core.dylib',
-          '../rust/target/release/libsensio_ppg_core.dylib',
-          'macos/Frameworks/libsensio_ppg_core.dylib',
-        ];
-        for (final p in paths) {
-          if (File(p).existsSync()) {
-            return SensioNativeBindings._(DynamicLibrary.open(p));
-          }
-        }
-        return SensioNativeBindings._(DynamicLibrary.process());
-      }
-      if (Platform.isLinux) {
-        final paths = [
-          'libsensio_ppg_core.so',
-          'rust/target/release/libsensio_ppg_core.so',
-          '../rust/target/release/libsensio_ppg_core.so',
-        ];
-        for (final p in paths) {
-          if (File(p).existsSync()) {
-            return SensioNativeBindings._(DynamicLibrary.open(p));
-          }
-        }
-        return SensioNativeBindings._(
-          DynamicLibrary.open('libsensio_ppg_core.so'),
-        );
-      }
-      if (Platform.isWindows) {
-        final paths = [
-          'sensio_ppg_core.dll',
-          'rust/target/release/sensio_ppg_core.dll',
-          '../rust/target/release/sensio_ppg_core.dll',
-        ];
-        for (final p in paths) {
-          if (File(p).existsSync()) {
-            return SensioNativeBindings._(DynamicLibrary.open(p));
-          }
-        }
-        return SensioNativeBindings._(
-          DynamicLibrary.open('sensio_ppg_core.dll'),
-        );
-      }
-    } catch (_) {
-      // Failed to load library
+      return null;
     }
+
+    if (Platform.isIOS) {
+      try {
+        return SensioNativeBindings._(DynamicLibrary.process());
+      } catch (e) {
+        lastLoadError = e;
+        return null;
+      }
+    }
+
+    if (Platform.isMacOS) {
+      final exe = File(Platform.resolvedExecutable);
+      final exeDir = exe.parent.path;
+      final bundleFrameworksPath = '${exe.parent.parent.path}/Frameworks/libsensio_ppg_core.dylib';
+      final paths = [
+        bundleFrameworksPath,
+        '$exeDir/libsensio_ppg_core.dylib',
+        '@rpath/libsensio_ppg_core.dylib',
+        'libsensio_ppg_core.dylib',
+        'macos/Frameworks/libsensio_ppg_core.dylib',
+        'bin/libsensio_ppg_core.dylib',
+        'rust/target/release/libsensio_ppg_core.dylib',
+        '../rust/target/release/libsensio_ppg_core.dylib',
+      ];
+
+      for (final p in paths) {
+        try {
+          if (p.startsWith('@') || !p.contains('/') || File(p).existsSync()) {
+            final lib = DynamicLibrary.open(p);
+            return SensioNativeBindings._(lib);
+          }
+        } catch (e) {
+          lastLoadError = 'Path "$p": $e';
+        }
+      }
+
+      try {
+        return SensioNativeBindings._(DynamicLibrary.process());
+      } catch (e) {
+        lastLoadError = 'process(): $e';
+      }
+      return null;
+    }
+
+    if (Platform.isLinux) {
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final paths = [
+        '$exeDir/libsensio_ppg_core.so',
+        '$exeDir/lib/libsensio_ppg_core.so',
+        'libsensio_ppg_core.so',
+        'bin/libsensio_ppg_core.so',
+        'rust/target/release/libsensio_ppg_core.so',
+        '../rust/target/release/libsensio_ppg_core.so',
+      ];
+      for (final p in paths) {
+        try {
+          if (!p.contains('/') || File(p).existsSync()) {
+            return SensioNativeBindings._(DynamicLibrary.open(p));
+          }
+        } catch (e) {
+          lastLoadError = 'Path "$p": $e';
+        }
+      }
+      try {
+        return SensioNativeBindings._(DynamicLibrary.open('libsensio_ppg_core.so'));
+      } catch (e) {
+        lastLoadError = 'open(libsensio_ppg_core.so): $e';
+      }
+      return null;
+    }
+
+    if (Platform.isWindows) {
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final paths = [
+        '$exeDir\\sensio_ppg_core.dll',
+        'sensio_ppg_core.dll',
+        'bin\\sensio_ppg_core.dll',
+        'rust\\target\\release\\sensio_ppg_core.dll',
+        '..\\rust\\target\\release\\sensio_ppg_core.dll',
+      ];
+      for (final p in paths) {
+        try {
+          if (!p.contains('\\') || File(p).existsSync()) {
+            return SensioNativeBindings._(DynamicLibrary.open(p));
+          }
+        } catch (e) {
+          lastLoadError = 'Path "$p": $e';
+        }
+      }
+      try {
+        return SensioNativeBindings._(DynamicLibrary.open('sensio_ppg_core.dll'));
+      } catch (e) {
+        lastLoadError = 'open(sensio_ppg_core.dll): $e';
+      }
+      return null;
+    }
+
     return null;
   }
 
