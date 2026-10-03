@@ -44,12 +44,25 @@ class SensioNativeBindings {
     }
 
     if (Platform.isIOS) {
+      final iosPaths = [
+        'libsensio_ppg_core.framework/libsensio_ppg_core',
+        'Frameworks/libsensio_ppg_core.framework/libsensio_ppg_core',
+        'libsensio_ppg_core.dylib',
+      ];
+      for (final p in iosPaths) {
+        try {
+          final lib = DynamicLibrary.open(p);
+          return SensioNativeBindings._(lib);
+        } catch (e) {
+          lastLoadError = 'Path "$p": $e';
+        }
+      }
       try {
         return SensioNativeBindings._(DynamicLibrary.process());
       } catch (e) {
-        lastLoadError = e;
-        return null;
+        lastLoadError = 'process(): $e (also tried $iosPaths)';
       }
+      return null;
     }
 
     if (Platform.isMacOS) {

@@ -13,12 +13,20 @@ echo "API Key: $API_KEY"
 echo "Issuer:  $API_ISSUER"
 echo "=================================================="
 
-echo "🔨 [1/3] Building Rust static library for iOS..."
+echo "🔨 [1/3] Building Rust dynamic & static library for iOS..."
 cd rust
 cargo build --release --target aarch64-apple-ios
-mkdir -p ../ios/Frameworks
-cp target/aarch64-apple-ios/release/libsensio_ppg_core.a ../ios/Frameworks/libsensio_ppg_core.a
 cd ..
+
+FW_DIR="ios/Frameworks/sensio_ppg_core/libsensio_ppg_core.framework"
+mkdir -p "$FW_DIR"
+cp rust/target/aarch64-apple-ios/release/libsensio_ppg_core.dylib "$FW_DIR/libsensio_ppg_core"
+install_name_tool -id @rpath/libsensio_ppg_core.framework/libsensio_ppg_core "$FW_DIR/libsensio_ppg_core"
+
+mkdir -p ios/Frameworks
+cp rust/target/aarch64-apple-ios/release/libsensio_ppg_core.a ios/Frameworks/libsensio_ppg_core.a
+
+(cd ios && pod install)
 
 echo "📦 [2/3] Archiving Flutter iOS IPA..."
 flutter build ipa --release
