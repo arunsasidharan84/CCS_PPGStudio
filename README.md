@@ -1,29 +1,55 @@
-# CCS PPG Studio - Clinical & Research Photoplethysmography (PPG) Analytics Platform
+<p align="center">
+  <img src="screenshots/ccs_logo.png" width="160" alt="Centre for Consciousness Studies Logo">
+</p>
+
+<h1 align="center">CCS PPG Studio</h1>
 
 <p align="center">
-  <img src="screenshots/ccs_logo.png" width="220" alt="CCS NIMHANS Logo">
+  <b>Clinical & Research Photoplethysmography (PPG) Analytics Platform</b>
 </p>
 
 <p align="center">
   A Joint Research & Engineering Collaboration of<br>
   <b>Centre for Consciousness Studies (CCS)</b>, Department of Neurophysiology,<br>
-  <b>National Institute of Mental Health and Neurosciences (NIMHANS)</b>, Bangalore, India<br>
+  <b>National Institute of Mental Health and Neurosciences (NIMHANS)</b>, Bengaluru, India<br>
   🤝<br>
   <a href="https://www.sensio-ai.in/"><b>SensIO</b></a> &nbsp;|&nbsp; <a href="https://www.neuro-stellar.com/"><b>Neurostellar</b></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white" alt="Flutter">
-  <img src="https://img.shields.io/badge/Rust-Backend-000000?logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/Platform-macOS%20|%20Windows%20|%20Linux%20|%20Android%20|%20iOS-informational" alt="Platforms">
-  <img src="https://img.shields.io/badge/Signal%20Processing-Zero--Phase%20IIR%20%7C%20IPFM%20%7C%20Kalman-success" alt="Signal Processing">
-  <img src="https://img.shields.io/badge/License-Academic%20%26%20Research-blue" alt="License">
+  <a href="#-quick-download"><b>📥 Download App</b></a> &nbsp;•&nbsp;
+  <a href="#about"><b>About</b></a> &nbsp;•&nbsp;
+  <a href="#-executive-overview--key-capabilities"><b>Key Capabilities</b></a> &nbsp;•&nbsp;
+  <a href="#-visual-walkthrough--module-breakdown"><b>Module Walkthrough</b></a> &nbsp;•&nbsp;
+  <a href="#-getting-started--building-locally"><b>Build from Source</b></a> &nbsp;•&nbsp;
+  <a href="https://github.com/arunsasidharan84/CCS_PPGStudio/issues"><b>Report Issue</b></a>
 </p>
 
-**Version:** 2.1.0  
-**Build:** Research & Clinical Edition  
+---
 
-Welcome to **CCS PPG Studio**, a high-performance, cross-platform signal visualization, quality-gated beat detection, and autonomic neurophysiology analysis suite. Built specifically for continuous photoplethysmography (PPG) acquired from wearable sensors (such as the **SensIO Smart Ring**, **Orbit Wearable**, and clinical PPG pulse oximeters), CCS PPG Studio bridges raw sensor telemetry with publication-ready digital biomarkers, multi-domain Heart Rate Variability (HRV), pulse morphology analytics, and executive PDF reporting.
+### 📥 Quick Download
+
+Pre-built standalone desktop and mobile packages are published automatically through GitHub Releases:
+
+| Platform | Package Type | Direct Download Link |
+| :--- | :--- | :--- |
+| **macOS** | Universal desktop application (.zip) | [SensioPPGStudio-macOS.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-macOS.zip) |
+| **Windows** | 64-bit desktop package (.zip) | [SensioPPGStudio-Windows.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-Windows.zip) |
+| **Android** | Mobile & Tablet APK | [SensioPPGStudio-Android.apk](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-Android.apk) |
+| **iOS** | iOS package (.ipa / .zip) | [SensioPPGStudio-iOS.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-iOS.zip) |
+
+> 📦 **All Releases & Assets:** View all published binaries and platform assets on the **[GitHub Releases Page](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest)**.  
+> 🍏 **macOS Gatekeeper:** If macOS blocks an ad-hoc signed build, run `xattr -rd com.apple.quarantine ~/Downloads/SensioPPGStudio.app` in Terminal.
+
+<p align="center">
+  <img src="screenshots/waveform_timeline.png" width="920" alt="CCS PPG Studio Waveform & Timeline Workspace">
+</p>
+
+---
+
+## About
+
+**CCS PPG Studio** is a high-performance, cross-platform signal visualization, quality-gated beat detection, and autonomic neurophysiology analysis suite. Built specifically for continuous photoplethysmography (PPG) acquired from wearable sensors (such as the **SensIO Smart Ring**, **Orbit Wearable**, and clinical pulse oximeters), CCS PPG Studio bridges raw sensor telemetry with publication-ready digital biomarkers, multi-domain Heart Rate Variability (HRV), pulse morphology analytics, and executive PDF reporting.
 
 ---
 
@@ -99,47 +125,24 @@ A structured statistical catalog breaking down the recording into 29 standardize
 | **Pulse Morphology** | Systolic Amplitude, Pulse Width, Crest Time, Reflection Index, Pulse Transit Time proxy | Arterial stiffness, peripheral vascular resistance, systemic compliance, and stroke volume dynamics. |
 | **Vitals & Actigraphy** | Skin Temperature, Tri-Axial Motion Index, Signal Quality Index (MQI), Valid Coverage % | Circadian thermoregulation, physical activity tracking, sleep/wake immobility, and artifact burden. |
 
-Every parameter is reported with comprehensive distributional statistics: **Mean ± SD**, **Median**, and **Min – Max Range**.
-
 ---
 
 ### 4. Time-Series Data Explorer & Raw Stream Viewer
-Designed for granular clinical review and export into downstream Python/R scientific workflows.
+A dedicated tabular inspection view providing pagination, sorting, and microsecond-level precision across all extracted cardiac intervals.
 
-<p align="center">
-  <img src="screenshots/csv_explorer.png" width="920" alt="CSV Data Explorer and Time-Series Grid">
-</p>
-
-* **Interval-Aggregated Grid (15-Second Windows)**:
-  * Tabular display of every 15-second epoch with aligned Clock Time, Elapsed Time, Mean HR, SDNN, RMSSD, Temperature, Motion, and SQI.
-  * Visual status badges for instant verification of data quality per window.
-* **Continuous Raw Stream Toggle**:
-  * Switch between windowed statistics and raw sensor telemetry (high-frequency PPG voltage, raw accelerometer axes $X/Y/Z$, and calibrated temperature).
-* **Search & Export**: Real-time metric filtering, search queries, and single-click full CSV export with standardized column headers.
+* **Full Inter-Beat Interval (IBI) Table**: Complete listing of timestamp, pulse interval ($RR\text{ ms}$), instantaneous heart rate ($60000 / RR$), and sample-level signal quality index ($\text{SQI}$).
+* **Dynamic Search & Filtering**: Isolate specific segments, review anomalous interval transitions, and cross-reference detected beats against raw telemetry.
+* **CSV / JSON Data Export**: Export cleaned IBI series directly for external modelling in Python, R, or MATLAB.
 
 ---
 
 ## ⚡ Speed & Architectural Highlights
 
-CCS PPG Studio is engineered for clinical and research settings where multi-hour or multi-day continuous recordings must open and process instantly without spinning wheels:
+CCS PPG Studio is architected for instant responsiveness on large multi-hour recordings:
 
-```mermaid
-flowchart LR
-    A["Raw Input Data<br>(CSV / .orb / .signal)"] --> B["Device Tick Demux<br>(Preserves 62.5 Hz Counter)"]
-    B --> C["Zero-Phase IIR Filter<br>(0.4 - 8.0 Hz Chebyshev)"]
-    C --> D["Refractory Peak Detector<br>& SQI Scoring"]
-    D --> E{"Refinement Pipeline"}
-    E -- "Standard" --> F["Gapless Quality Mask<br>& Direct HRV"]
-    E -- "IPFM + Kalman" --> G["Spurious Beat Pruning<br>+ IPFM + Adaptive KF"]
-    F --> H["Multi-Domain Feature Engine<br>(Time, Freq, Non-Linear)"]
-    G --> H
-    H --> I["Publication Vector Reports<br>& Interactive UI"]
-```
-
-1. **Zero-Phase IIR Filtering**: Forward-backward digital filtering (`filtfilt`) removes 50/60 Hz powerline interference, motion baseline drift, and sensor noise while guaranteeing **zero phase distortion**—essential for preserving true peak morphology and peak-to-peak timings.
-2. **Hardware Counter Timekeeping**: Unlike standard pipelines that rely on jittery Bluetooth packet arrival timestamps, CCS PPG Studio demultiplexes the hardware sample counter ($T$) at 62.5 Hz. Even when packets arrive in batched BLE bursts, the native clock reconstructed from hardware counter ticks accurately reflects the physiological time base.
-3. **Isolate-Based Background Threading**: Computationally heavy algorithms (Welch periodograms, rolling statistics, nonlinear phase portraits) execute on background Dart Isolates and native Rust worker threads, guaranteeing 60+ FPS fluid rendering on the UI thread.
-4. **Adaptive Mobile/Desktop Breakpoints**: Responsive layouts automatically adapt between smartphone form factors (390×844) and desktop displays (1280×800+), replacing cramped dropdowns with full-width searchable dialogs and ensuring floating buttons never obscure chart controls.
+1. **Native Rust DSP Engine (`sensio_ppg_core`)**: Compute-heavy operations (zero-phase forward-backward digital filtering, convolution kernels, template matching, matrix inversion, and FFT) run in compiled Rust through high-speed C FFI bindings.
+2. **Deterministic Memory Footprint**: Ingests multi-gigabyte continuous sensor streams using ring-buffered sliding windows and contiguous memory arrays, running seamlessly on resource-constrained mobile hardware.
+3. **Reactive UI State Isolation**: Flutter isolate workers decouple data decoding and DSP computations from the UI rendering thread, locking canvas animations and gesture scrubbing at 60+ FPS.
 
 ---
 
@@ -147,75 +150,46 @@ flowchart LR
 
 ### A. Standard Refractory SQI vs. Quality-Aware IPFM & Kalman Filtering
 
-Wearable ring data presents unique signal challenges: ring rotation, micro-movements, cold fingers (vasoconstriction), and ambient optical leakage. CCS PPG Studio provides two complementary signal pipelines:
+CCS PPG Studio includes two state-of-the-art peak detection pipelines:
 
-```
-+---------------------------------------------------------------------------------------+
-|                                    RAW PPG SIGNAL                                     |
-+---------------------------------------------------------------------------------------+
-                                           |
-                                           v
-             +-----------------------------------------------------------+
-             |    Zero-Phase Bandpass (0.4 - 8.0 Hz) + Refractory SQI    |
-             +-----------------------------------------------------------+
-                                           |
-                    +----------------------+----------------------+
-                    |                                             |
-                    v                                             v
-     [ Standard Refractory Mode ]                 [ Optional IPFM + Kalman Mode ]
-  * Strict morphological thresholding          * Spurious Beat Pruning (< 60% conf)
-  * Direct peak-to-peak RR intervals           * Continuous Chain Segmenting (<= 4 gaps)
-  * Non-bridging gap masking                   * IPFM Autonomic Modulating Signal m(t)
-  * Preserves exact empirical pulses           * Adaptive Measurement Noise: R_k = R_0 / SQI_k
-                    |                                             |
-                    +----------------------+----------------------+
-                                           |
-                                           v
-                     +-------------------------------------------+
-                     |  Multi-Domain HRV & Feature Extraction   |
-                     +-------------------------------------------+
-```
+#### 1. Standard Refractory SQI
+* **Gating**: Dynamic physiological refractory blanking ($250\text{ ms} \le RR \le 2000\text{ ms}$).
+* **Morphology Template Matching**: Computes correlation with an empirical PPG pulse template to produce an epoch SQI between 0.0 and 1.0.
+* **Best Suited For**: Clean to moderately noisy daytime records, clinical pulse oximetry, and fast visual verification.
 
-#### Why and When to Use the IPFM + Kalman Pipeline:
-1. **Spurious Beat Pruning**: Ring recordings frequently contain false-positive peak detections caused by minor hand motion. The IPFM pre-cleaner strips detected peaks whose morphological quality index falls below $60\%$.
-2. **Confidence-Gated Segmentation**: Isolated peaks flanked by large dropouts are discarded; only continuous chains of valid beats ($\le 4$ missing cycles) are passed to autonomic estimation.
-3. **Integral Pulse Frequency Modulation (IPFM)**: The cardiac pacemaker is modeled as an integrator driven by a mean heart rate and a time-varying autonomic modulating signal $m(t)$. IPFM reconstructs $m(t)$ directly from pulse arrival events, decoupling genuine autonomic tone from missed or ectopic beats.
-4. **SQI-Weighted Kalman Smoothing**: In the state-space formulation, the measurement noise covariance $R_k$ scales inversely with pulse quality:
-   $$\mathbf{R}_k = \frac{\mathbf{R}_0}{\text{SQI}_k}$$
-   * **High SQI ($\approx 1.0$)**: $R_k$ is small, and the Kalman filter strictly tracks the observed pulse interval.
-   * **Degraded SQI ($< 0.5$)**: $R_k$ increases dramatically, causing the filter to rely on the cardiac kinematic prior and historical rhythm, smoothly gliding through brief noise bursts without corrupting HRV metrics.
-5. **Instant In-App Comparison**: Users can toggle between pipelines on the fly via the `IPFM+KF` badge in the AppBar, or click **"Compare with IPFM+Kalman Pipeline"** in the Comparison Screen to see side-by-side metric deltas and Poincaré shifts.
+#### 2. Quality-Aware IPFM & SQI-Weighted Kalman Filtering (Orbit Model)
+Ported directly from research grade algorithms for wearable ring PPG:
+* **Spurious Beat Pruning**: Rejects candidate beats with template confidence $< 60\%$.
+* **Continuous Chain Segmentation**: Partitions the beat stream whenever $> 4$ consecutive beats are missing, preventing artificial interpolation across long dropouts.
+* **IPFM Representation**: Models the instantaneous cardiac rhythm as the output of an Integral Pulse Frequency Modulation threshold crossing:
+  $$m(t) = d_{RR}(t) - 1$$
+* **Kalman Filtering with Adaptive Noise Scaling**:
+  $$R_k = \frac{R_0}{\text{SQI}_k}$$
+  Where noisy samples ($\text{SQI} \to 0$) inflate measurement variance $R_k$, gracefully shifting state estimates toward the physiological prior.
 
 ---
 
 ## 📑 Comprehensive PDF Reporting & Session Comparison
 
-CCS PPG Studio includes a native vector PDF reporting engine that generates clinical and research documents ready for journal submission or clinical case review.
-
 ### 1. Single-Session Executive PDF Report
-* **Multi-Page Structured Document**: Includes patient/subject demographics, recording hardware details, and study notes.
-* **Vector Poincaré Plot**: Crisp SVG vector rendering of the Poincaré scatter map, $1\sigma$ ellipse, and $SD1/SD2$ vectors at 300 DPI print fidelity.
-* **Multi-Domain Metric Tables**: Complete breakdown of all 29 features with benchmark reference intervals.
-* **Circadian & Chronobiological Trends**: High-resolution longitudinal charts of heart rate, temperature, and activity.
+* Executive cover banner featuring subject ID, recording date, total duration, and overall coverage percentage.
+* High-resolution vector Poincaré plot with $SD1/SD2$ orthogonal axes and $1\sigma$ ellipse contours.
+* Complete 29-feature clinical biomarker table organized into standardized domains.
+* Gapless macro-episode distribution breakdown with percentage pie chart.
 
 ### 2. Two-Session A/B Comparison Report
-Inspired by clinical intervention studies, this module enables head-to-head comparison between two recordings (e.g., Pre vs. Post meditation, Day 1 vs. Day 2, or Standard vs. IPFM+Kalman processing).
-
+Enables head-to-head comparison between two recordings (e.g., Pre vs. Post intervention, Day 1 vs. Day 2, or Standard vs. IPFM+Kalman processing):
 * **Side-by-Side Poincaré Scatter Maps**: Direct visual comparison of ellipse orientation, $SD1$ dispersion, and $SD2$ elongation.
 * **Quantitative Shift Matrix ($\Delta$ & $\Delta \%$)**:
-  * Computes absolute and percentage changes:
-    $$\Delta \% = \left(\frac{\text{Session}_2 - \text{Session}_1}{\text{Session}_1}\right) \times 100$$
-  * Color-coded directional badges indicating significant autonomic increases or reductions.
-* **Comparative PDF Export**: Formatted comparison document presenting paired tables and visual charts side-by-side.
+  $$\Delta \% = \left(\frac{\text{Session}_2 - \text{Session}_1}{\text{Session}_1}\right) \times 100$$
+* Color-coded directional badges indicating significant autonomic increases or reductions.
 
 ---
 
 ## 📂 Universal Data Ingestion & File Formats
 
-CCS PPG Studio supports multiple clinical, consumer, and research data formats:
-
 * **SensIO Smart Ring (`*_ppg_data.csv`)**:
-  * Configurable file filter (definable in the Settings dialog).
+  * Configurable file filter (definable in Settings).
   * Ingests synchronized infrared/green PPG, ambient temperature, tri-axial accelerometer ($X/Y/Z$), and battery telemetry.
 * **Orbit Smart Wearable (`.orb` & `.signal`)**:
   * Native binary and JSON-lines decoder for Orbit recordings.
@@ -230,10 +204,9 @@ CCS PPG Studio supports multiple clinical, consumer, and research data formats:
 ## 🚀 Getting Started & Building Locally
 
 ### Prerequisites
-* **Flutter SDK**: 3.22.x or higher (Stable channel)
-* **Dart SDK**: 3.4.x or higher
-* **Rust Toolchain**: `cargo` and `rustc` 1.75+ (for native performance acceleration)
-* **C/C++ Compiler**: Clang/Xcode on macOS, MSVC on Windows, GCC on Linux
+* [Flutter SDK](https://docs.flutter.dev/get-started/install): 3.22.x or higher (Stable channel)
+* [Rust Toolchain](https://www.rust-lang.org/tools/install): `cargo` and `rustc` 1.75+
+* C/C++ Compiler: Clang/Xcode on macOS, MSVC on Windows, GCC on Linux
 
 ### 1. Clone the Repository
 ```sh
@@ -243,7 +216,7 @@ cd CCS_PPGStudio
 
 ### 2. Build the Native Rust Engine
 ```sh
-cd native
+cd rust
 cargo build --release
 cd ..
 ```
@@ -271,18 +244,18 @@ flutter run -d <device-id>
 flutter test
 
 # Run Rust native DSP and matrix tests
-cd native && cargo test && cd ..
+cd rust && cargo test && cd ..
 ```
 
 ---
 
 ## 🤝 Research Collaboration & Acknowledgments
 
-**CCS PPG Studio** is developed as a joint open-science initiative by:
+**CCS PPG Studio** is developed as a joint research and engineering collaboration by:
 
 * **Centre for Consciousness Studies (CCS)**  
   *Department of Neurophysiology*,  
-  **National Institute of Mental Health and Neurosciences (NIMHANS)**, Bangalore, India.  
+  **National Institute of Mental Health and Neurosciences (NIMHANS)**, Bengaluru, India.  
   *Pioneering research into altered states of consciousness, sleep neurophysiology, meditation, and autonomic dynamics.*
 
 * **SensIO** ([https://www.sensio-ai.in/](https://www.sensio-ai.in/))  
@@ -290,6 +263,16 @@ cd native && cargo test && cd ..
 
 * **Neurostellar** ([https://www.neuro-stellar.com/](https://www.neuro-stellar.com/))  
   *Experts in advanced neurotechnology, non-invasive physiological monitoring, and clinical-grade health AI platforms.*
+
+---
+
+## 🔗 Related Repositories
+
+| Repository | Description |
+| :--- | :--- |
+| [CCS Sleep Studio](https://github.com/arunsasidharan84/CCS_SleepStudio) | Sleep EEG visualization, manual staging, 9 automated AI models, and AnalyseNidra quantitative reports |
+| [CCS Mobile Studio](https://github.com/arunsasidharan84/CCS_MobileStudio) | Mobile/desktop neurophysiology acquisition, stimulation, ANGEL ERP, and cognitive experiments |
+| [CCS EEG Studio](https://github.com/arunsasidharan84/CCS_EEGStudio) | Native-speed EEG preprocessing, feature extraction, connectivity, statistics, and reporting |
 
 ---
 
