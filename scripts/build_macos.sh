@@ -27,7 +27,7 @@ echo "🚀 [3/4] Building Flutter macOS application..."
 flutter build macos --release
 
 echo "🔒 [4/4] Injecting native engine & codesigning app bundle..."
-APP="build/macos/Build/Products/Release/sensio_ppg_app.app"
+APP="build/macos/Build/Products/Release/CCS PPG Studio.app"
 mkdir -p "$APP/Contents/Frameworks"
 cp macos/Frameworks/libsensio_ppg_core.dylib "$APP/Contents/Frameworks/libsensio_ppg_core.dylib"
 
@@ -42,8 +42,8 @@ else
 fi
 
 mkdir -p dist
-ditto -c -k --sequesterRsrc --keepParent "$APP" dist/SensioPPGStudio-macOS.zip
+ditto -c -k --sequesterRsrc --keepParent "$APP" dist/CCSPPGStudio-macos.zip
 
 echo "=================================================="
-echo "✅ macOS build completed: dist/SensioPPGStudio-macOS.zip"
+echo "✅ macOS build completed: dist/CCSPPGStudio-macos.zip"
 echo "=================================================="

@@ -17,6 +17,18 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/arunsasidharan84/CCS_PPGStudio?style=for-the-badge&color=2563eb&label=RELEASE"></a>
+  <a href="https://github.com/arunsasidharan84/CCS_PPGStudio/actions/workflows/build_and_deploy.yml"><img alt="Desktop build" src="https://img.shields.io/github/actions/workflow/status/arunsasidharan84/CCS_PPGStudio/build_and_deploy.yml?style=for-the-badge&label=BUILD"></a>
+  <a href="https://github.com/arunsasidharan84/CCS_PPGStudio/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/arunsasidharan84/CCS_PPGStudio/total?style=for-the-badge&color=16a34a&label=DOWNLOADS"></a>
+</p>
+
+<p align="center">
+  <b>Current version: 1.0.1</b> ·
+  <a href="https://github.com/arunsasidharan84/CCS_PPGStudio/releases">Release notes</a> ·
+  <a href="https://github.com/arunsasidharan84/CCS_PPGStudio/issues">Report a problem</a>
+</p>
+
+<p align="center">
   <a href="#-quick-download"><b>📥 Download App</b></a> &nbsp;•&nbsp;
   <a href="#about"><b>About</b></a> &nbsp;•&nbsp;
   <a href="#-executive-overview--key-capabilities"><b>Key Capabilities</b></a> &nbsp;•&nbsp;
@@ -31,15 +43,30 @@
 
 Pre-built standalone desktop and mobile packages are published automatically through GitHub Releases:
 
-| Platform | Package Type | Direct Download Link |
-| :--- | :--- | :--- |
-| **macOS** | Universal desktop application (.zip) | [SensioPPGStudio-macOS.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-macOS.zip) |
-| **Windows** | 64-bit desktop package (.zip) | [SensioPPGStudio-Windows.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-Windows.zip) |
-| **Android** | Mobile & Tablet APK | [SensioPPGStudio-Android.apk](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-Android.apk) |
-| **iOS** | iOS package (.ipa / .zip) | [SensioPPGStudio-iOS.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/SensioPPGStudio-iOS.zip) |
+| Platform | Package Type | Extracted App / Binary | Direct Download Link |
+| :--- | :--- | :--- | :--- |
+| **macOS** | Universal desktop application (.zip) | **`CCS PPG Studio.app`** | [CCSPPGStudio-macos.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/CCSPPGStudio-macos.zip) |
+| **Windows** | 64-bit desktop package (.zip) | `CCSPPGStudio.exe` | [CCSPPGStudio-Windows.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/CCSPPGStudio-Windows.zip) |
+| **Android** | Mobile & Tablet APK | `CCSPPGStudio-Android.apk` | [CCSPPGStudio-Android.apk](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/CCSPPGStudio-Android.apk) |
+| **iOS** | iOS package (.ipa / .zip) | `CCSPPGStudio-iOS.zip` | [CCSPPGStudio-iOS.zip](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest/download/CCSPPGStudio-iOS.zip) |
 
-> 📦 **All Releases & Assets:** View all published binaries and platform assets on the **[GitHub Releases Page](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest)**.  
-> 🍏 **macOS Gatekeeper:** If macOS blocks an ad-hoc signed build, run `xattr -rd com.apple.quarantine ~/Downloads/SensioPPGStudio.app` in Terminal.
+> 📦 **All Releases & Assets:** View all published binaries and platform assets on the **[GitHub Releases Page](https://github.com/arunsasidharan84/CCS_PPGStudio/releases/latest)**.
+
+#### 🍏 First-Time Launch for macOS Users (Gatekeeper Setup)
+
+When extracting `CCSPPGStudio-macos.zip`, macOS extracts **`CCS PPG Studio.app`** into your `~/Downloads` folder. Because development builds are ad-hoc signed, macOS Gatekeeper blocks opening them by default.
+
+To enable the app, run the following in **Terminal**:
+
+```sh
+# 1. Clear Gatekeeper quarantine on the downloaded app:
+xattr -rd com.apple.quarantine ~/Downloads/CCS\ PPG\ Studio.app
+
+# 2. Move to Applications folder:
+mv ~/Downloads/CCS\ PPG\ Studio.app /Applications/
+```
+
+> **Tip (Finder alternative):** In Finder, **Right-click (or Control-click)** `CCS PPG Studio.app` → select **Open** → click **Open** on the security confirmation prompt. You only need to do this once.
 
 <p align="center">
   <img src="screenshots/waveform_timeline.png" width="920" alt="CCS PPG Studio Waveform & Timeline Workspace">

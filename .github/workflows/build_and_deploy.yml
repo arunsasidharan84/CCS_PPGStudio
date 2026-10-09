@@ -80,7 +80,7 @@ jobs:
 
       - name: Embed native library & codesign macOS app bundle
         run: |
-          APP="build/macos/Build/Products/Release/sensio_ppg_app.app"
+          APP="build/macos/Build/Products/Release/CCS PPG Studio.app"
           mkdir -p "$APP/Contents/Frameworks"
           cp macos/Frameworks/libsensio_ppg_core.dylib "$APP/Contents/Frameworks/libsensio_ppg_core.dylib"
           codesign --force --sign - "$APP/Contents/Frameworks/libsensio_ppg_core.dylib"
@@ -90,14 +90,14 @@ jobs:
         run: |
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
-            build/macos/Build/Products/Release/sensio_ppg_app.app \
-            dist/SensioPPGStudio-macOS.zip
+            "build/macos/Build/Products/Release/CCS PPG Studio.app" \
+            dist/CCSPPGStudio-macos.zip
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SensioPPGStudio-macOS
-          path: dist/SensioPPGStudio-macOS.zip
+          name: CCSPPGStudio-macos
+          path: dist/CCSPPGStudio-macos.zip
           retention-days: 14
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -141,14 +141,14 @@ jobs:
         run: |
           mkdir -p dist
           cp rust/target/release/sensio_ppg_core.dll build/windows/x64/runner/Release/
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath dist/SensioPPGStudio-Windows.zip
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath dist/CCSPPGStudio-Windows.zip
         shell: pwsh
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SensioPPGStudio-Windows
-          path: dist/SensioPPGStudio-Windows.zip
+          name: CCSPPGStudio-Windows
+          path: dist/CCSPPGStudio-Windows.zip
           retention-days: 14
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -200,14 +200,14 @@ jobs:
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SensioPPGStudio-Android-APK
+          name: CCSPPGStudio-Android-APK
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
 
       - name: Upload Android AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SensioPPGStudio-Android-AAB
+          name: CCSPPGStudio-Android-AAB
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
 
@@ -266,14 +266,14 @@ jobs:
         run: |
           mkdir -p dist
           cd build/ios/iphoneos
-          zip -r ../../../dist/SensioPPGStudio-iOS.zip .
+          zip -r ../../../dist/CCSPPGStudio-iOS.zip .
           cd ../../..
 
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SensioPPGStudio-iOS
-          path: dist/SensioPPGStudio-iOS.zip
+          name: CCSPPGStudio-iOS
+          path: dist/CCSPPGStudio-iOS.zip
           retention-days: 14
 
       - name: Deploy to TestFlight
