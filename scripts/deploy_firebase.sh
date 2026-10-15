@@ -16,10 +16,7 @@ echo "Notes:   $NOTES"
 echo "=================================================="
 
 APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
-if [ ! -f "$APK_PATH" ]; then
-  echo "📦 APK not found at $APK_PATH, building now..."
-  ./scripts/build_android.sh
-fi
+./scripts/build_android.sh
 
 echo "🚀 Uploading APK to Firebase App Distribution..."
 npx firebase-tools appdistribution:distribute "$APK_PATH" \

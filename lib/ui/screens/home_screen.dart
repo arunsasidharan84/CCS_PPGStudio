@@ -1,3 +1,6 @@
+import 'review_screen.dart';
+import '../../core/services/session_review_service.dart';
+import 'update_screen.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import '../widgets/recording_picker.dart';
@@ -37,6 +40,9 @@ class _HomeScreenState extends State<HomeScreen>
   String? _errorMessage;
   SessionAnalysisResult? _analysisResult;
 
+  SessionAnalysisResult? _originalResult;
+  List<ReviewEdit> _reviewEdits = [];
+
   double _currentStartS = 0.0;
   double _windowDurationS = 30.0; // 30s default zoom
   bool _showClockTime = false; // Toggle between elapsed time and clock time
@@ -52,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _analysisResult = widget.initialResult;
+    _originalResult = widget.initialResult;
     _selectedPpgPath = widget.initialPath;
     if (_analysisResult != null) {
       _analysisWindowStartS = 0;
@@ -230,13 +237,21 @@ class _HomeScreenState extends State<HomeScreen>
     });
 
     try {
-      final result = await PPGAnalysisService.analyzeFile(
+      var result = await PPGAnalysisService.analyzeFile(
         _selectedPpgPath!,
         sigmotPath: _detectedSigmotPath,
         sampleRate: 50.0,
       );
 
+      final original = result;
+      final edits = await SessionReviewService.load(_selectedPpgPath!);
+      if (edits.isNotEmpty) {
+        result = await SessionReviewService.apply(original, edits: edits);
+      }
+      if (!mounted) return;
       setState(() {
+        _originalResult = original;
+        _reviewEdits = edits;
         _analysisResult = result;
         _isAnalyzing = false;
         _currentStartS = 0.0;
@@ -341,7 +356,39 @@ class _HomeScreenState extends State<HomeScreen>
         ? 'Recording'
         : File(_selectedPpgPath!).uri.pathSegments.last,
     _analysisResult!,
+    reviewNotes: _reviewEdits
+        .map(
+          (e) =>
+              '${e.include ? 'Include' : 'Exclude'} ${e.start.toStringAsFixed(2)}–${e.end.toStringAsFixed(2)} s',
+        )
+        .toList(),
   );
+
+  void _openComparison() => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => ComparisonScreen(first: _reportSession)),
+  );
+  Future<void> _openReview() async {
+    final outcome = await Navigator.push<ReviewOutcome>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReviewScreen(
+          original: _originalResult!,
+          current: _analysisResult!,
+          edits: _reviewEdits,
+          path: _selectedPpgPath,
+        ),
+      ),
+    );
+    if (outcome == null || !mounted) return;
+    setState(() {
+      _analysisResult = outcome.result;
+      _reviewEdits = outcome.edits;
+      _windowStats = null;
+      _analysisWindowStartS = 0;
+      _analysisWindowEndS = outcome.result.totalDurationS;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -387,7 +434,12 @@ class _HomeScreenState extends State<HomeScreen>
           PopupMenuButton<String>(
             tooltip: 'Reports, export and settings',
             onSelected: (value) async {
-              if (value == 'settings') {
+              if (value == 'updates') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const UpdateScreen()),
+                );
+              } else if (value == 'settings') {
                 await showRecordingSettings(
                   context,
                   onSettingsChanged: () {
@@ -395,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen>
                   },
                 );
               } else if (value == 'toggle_pipeline') {
-                if (_analysisResult == null) return;
+                if (_analysisResult == null || _reviewEdits.isNotEmpty) return;
                 final nextMode = _analysisResult!.pipelineMode == 'ipfm_kalman'
                     ? 'standard'
                     : 'ipfm_kalman';
@@ -429,6 +481,7 @@ class _HomeScreenState extends State<HomeScreen>
               if (_analysisResult != null) ...[
                 PopupMenuItem(
                   value: 'toggle_pipeline',
+                  enabled: _reviewEdits.isEmpty,
                   child: Text(
                     _analysisResult!.pipelineMode == 'ipfm_kalman'
                         ? 'Switch to Standard Pipeline'
@@ -458,6 +511,11 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
               ],
+              if (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
+                const PopupMenuItem(
+                  value: 'updates',
+                  child: Text('Check for updates'),
+                ),
               const PopupMenuItem(
                 value: 'settings',
                 child: Text('Recording settings'),
@@ -642,6 +700,28 @@ class _HomeScreenState extends State<HomeScreen>
                 else
                   _buildKpiBar(),
 
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _openComparison,
+                        icon: const Icon(Icons.compare_arrows),
+                        label: const Text('Compare sessions'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _openReview,
+                        icon: const Icon(Icons.fact_check_outlined),
+                        label: const Text('Review detections'),
+                      ),
+                    ],
+                  ),
+                ),
                 // Tab Navigation
                 TabBar(
                   controller: _tabController,

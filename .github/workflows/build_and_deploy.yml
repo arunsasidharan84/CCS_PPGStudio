@@ -47,6 +47,9 @@ jobs:
         with:
           workspaces: rust
 
+      - name: Test native analysis
+        run: cargo test --manifest-path rust/Cargo.toml
+
       - name: Build Rust universal engine
         run: |
           cd rust
@@ -151,6 +154,36 @@ jobs:
           path: dist/CCSPPGStudio-Windows.zip
           retention-days: 14
 
+  build-linux:
+    name: Linux Desktop (x64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Install Linux desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: cargo build --manifest-path rust/Cargo.toml --release
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - name: Package Linux bundle
+        run: |
+          mkdir -p dist/CCSPPGStudio
+          cp -a build/linux/x64/release/bundle/. dist/CCSPPGStudio/
+          cp rust/target/release/libsensio_ppg_core.so dist/CCSPPGStudio/lib/
+          tar -czf dist/CCSPPGStudio-Linux-x64.tar.gz -C dist CCSPPGStudio
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CCSPPGStudio-Linux
+          path: dist/CCSPPGStudio-Linux-x64.tar.gz
+          retention-days: 14
+
   # ──────────────────────────────────────────────────────────────────────────
   # 3. Android Build & Firebase App Distribution
   # ──────────────────────────────────────────────────────────────────────────
@@ -212,7 +245,7 @@ jobs:
           retention-days: 14
 
       - name: Deploy to Firebase App Distribution
-        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_firebase == 'true') || startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_firebase == 'true') }}
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID_ANDROID || '1:625498974111:android:0404b3c6e15ce5afc47faa' }}
@@ -224,7 +257,8 @@ jobs:
               --token "$FIREBASE_TOKEN" \
               --release-notes "Automated GitHub Actions build: $(git log -1 --pretty=%B)"
           else
-            echo "FIREBASE_TOKEN secret not set in GitHub repository; skipping upload."
+            echo "FIREBASE_TOKEN secret not set; requested upload cannot proceed." >&2
+            exit 1
           fi
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -244,11 +278,7 @@ jobs:
 
       - name: Build Rust static library for iOS
         run: |
-          cd rust
-          cargo build --release --target aarch64-apple-ios
-          mkdir -p ../ios/Frameworks
-          cp target/aarch64-apple-ios/release/libsensio_ppg_core.a ../ios/Frameworks/libsensio_ppg_core.a
-          cd ..
+          ./scripts/prepare_ios_engine.sh
 
       - name: Set up Flutter (stable)
         uses: subosito/flutter-action@v2
@@ -292,7 +322,8 @@ jobs:
               --apiKey "$APP_STORE_KEY_ID" \
               --apiIssuer "$APP_STORE_ISSUER"
           else
-            echo "App Store Connect credentials not configured in secrets; skipping TestFlight upload."
+            echo "App Store Connect credentials not configured; requested upload cannot proceed." >&2
+            exit 1
           fi
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -301,13 +332,19 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-macos, build-windows, build-android, build-ios]
+    needs: [build-macos, build-windows, build-linux, build-android, build-ios]
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: release_artifacts
+
+      - name: Generate package checksums
+        run: |
+          cd release_artifacts
+          find . -mindepth 2 -type f -exec mv {} . \;
+          sha256sum *.zip *.tar.gz *.apk *.aab > SHA256SUMS
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1

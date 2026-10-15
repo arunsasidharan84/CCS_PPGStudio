@@ -14,17 +14,7 @@ echo "Issuer:  $API_ISSUER"
 echo "=================================================="
 
 echo "🔨 [1/3] Building Rust dynamic & static library for iOS..."
-cd rust
-cargo build --release --target aarch64-apple-ios
-cd ..
-
-FW_DIR="ios/Frameworks/sensio_ppg_core/libsensio_ppg_core.framework"
-mkdir -p "$FW_DIR"
-cp rust/target/aarch64-apple-ios/release/libsensio_ppg_core.dylib "$FW_DIR/libsensio_ppg_core"
-install_name_tool -id @rpath/libsensio_ppg_core.framework/libsensio_ppg_core "$FW_DIR/libsensio_ppg_core"
-
-mkdir -p ios/Frameworks
-cp rust/target/aarch64-apple-ios/release/libsensio_ppg_core.a ios/Frameworks/libsensio_ppg_core.a
+./scripts/prepare_ios_engine.sh
 
 (cd ios && pod install)
 

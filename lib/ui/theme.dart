@@ -27,6 +27,17 @@ class SensioTheme {
         surface: surface,
         error: badArtifact,
       ),
+      visualDensity: VisualDensity.standard,
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+      ),
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
       cardTheme: CardThemeData(
         color: surface,
         elevation: 0,

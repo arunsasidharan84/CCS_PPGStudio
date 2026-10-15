@@ -134,6 +134,12 @@ class _WaveformViewerState extends State<WaveformViewer> {
                         size: Size.infinite,
                         painter: _PpgWaveformPainter(
                           times: windowTimes,
+                          pulseMask: widget.result.pulseMask.isEmpty
+                              ? const []
+                              : widget.result.pulseMask.sublist(
+                                  startIdx,
+                                  endIdx,
+                                ),
                           filtered: windowFiltered,
                           allTimes: widget.result.time,
                           peaks: inWinPeaks,
@@ -422,6 +428,7 @@ class _WaveformViewerState extends State<WaveformViewer> {
 }
 
 class _PpgWaveformPainter extends CustomPainter {
+  final List<bool> pulseMask;
   final List<double> times;
   final List<double> filtered;
   final List<double> allTimes;
@@ -436,6 +443,7 @@ class _PpgWaveformPainter extends CustomPainter {
 
   _PpgWaveformPainter({
     required this.times,
+    required this.pulseMask,
     required this.filtered,
     required this.allTimes,
     required this.peaks,
@@ -451,6 +459,25 @@ class _PpgWaveformPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (times.isEmpty || filtered.isEmpty) return;
+    final shade = Paint()
+      ..color = SensioTheme.rejectNoise.withValues(alpha: .16);
+    var runStart = -1;
+    for (var i = 0; i <= pulseMask.length; i++) {
+      if (i < pulseMask.length && !pulseMask[i]) {
+        if (runStart < 0) runStart = i;
+      } else if (runStart >= 0) {
+        canvas.drawRect(
+          Rect.fromLTRB(
+            runStart / pulseMask.length * size.width,
+            0,
+            i / pulseMask.length * size.width,
+            size.height - 26,
+          ),
+          shade,
+        );
+        runStart = -1;
+      }
+    }
 
     final bottomPadding = 26.0;
     final plotHeight = size.height - bottomPadding;
@@ -578,7 +605,9 @@ class _PpgWaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PpgWaveformPainter oldDelegate) {
-    return oldDelegate.startS != startS ||
+    return oldDelegate.pulseMask != pulseMask ||
+        oldDelegate.peaks != peaks ||
+        oldDelegate.startS != startS ||
         oldDelegate.durationS != durationS ||
         oldDelegate.verticalGain != verticalGain ||
         oldDelegate.showClockTime != showClockTime ||

@@ -249,7 +249,11 @@ pub fn load_temperature_csv(path: &Path) -> Option<(Vec<f64>, Vec<f64>)> {
         prev_total_sec = Some(sec_of_day);
 
         // Convert ADC centi-degrees to Celsius if needed (e.g. 3454 -> 34.54 °C)
-        let temp_c = if raw_val > 100.0 { raw_val / 100.0 } else { raw_val };
+        let temp_c = if raw_val > 100.0 {
+            raw_val / 100.0
+        } else {
+            raw_val
+        };
 
         seconds_list.push(sec_of_day + day_offset);
         values_list.push(temp_c);
@@ -358,9 +362,15 @@ pub extern "C" fn sensio_process_file(
                 let mut fallback = None;
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    let f = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                    let f = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
                     if f.contains("sigmot") && f.ends_with(".csv") {
-                        if fname.len() >= 15 && f.contains(&fname[..fname.len().min(15)].to_lowercase()) {
+                        if fname.len() >= 15
+                            && f.contains(&fname[..fname.len().min(15)].to_lowercase())
+                        {
                             found = Some(path);
                             break;
                         }
@@ -395,16 +405,25 @@ pub extern "C" fn sensio_process_file(
                 let mut fallback = None;
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    let f = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                    let f = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
                     if (f.contains("temperature") || f.contains("temp")) && f.ends_with(".csv") {
-                        if fname.len() >= 15 && f.contains(&fname[..fname.len().min(15)].to_lowercase()) {
+                        if fname.len() >= 15
+                            && f.contains(&fname[..fname.len().min(15)].to_lowercase())
+                        {
                             found = Some(path);
                             break;
                         }
                         fallback = Some(path);
                     }
                 }
-                match found.or(fallback).and_then(|path| load_temperature_csv(&path)) {
+                match found
+                    .or(fallback)
+                    .and_then(|path| load_temperature_csv(&path))
+                {
                     Some((s, v)) => (Some(s), Some(v)),
                     None => (None, None),
                 }
@@ -423,7 +442,15 @@ pub extern "C" fn sensio_process_file(
     let temp_sec_ref = temp_sec.as_deref();
     let temp_val_ref = temp_val.as_deref();
 
-    match analyze_session(&raw_sec, &raw_val, fs, sig_sec_ref, sig_val_ref, temp_sec_ref, temp_val_ref) {
+    match analyze_session(
+        &raw_sec,
+        &raw_val,
+        fs,
+        sig_sec_ref,
+        sig_val_ref,
+        temp_sec_ref,
+        temp_val_ref,
+    ) {
         Ok(result) => {
             let resp = FfiResponse {
                 success: true,
@@ -440,5 +467,319 @@ pub extern "C" fn sensio_process_file(
             };
             to_c_string(serde_json::to_string(&resp).unwrap())
         }
+    }
+}
+
+/// Re-evaluate a reviewed signal or selected experiment region using the same DSP engine.
+#[derive(serde::Deserialize)]
+struct ReviewRequest {
+    time: Vec<f64>,
+    filtered: Vec<Option<f64>>,
+    norm_ppg: Vec<Option<f64>>,
+    usable_mask: Vec<bool>,
+    pulse_mask: Vec<bool>,
+    quality_trace: Vec<Option<f64>>,
+    sigmot_trace: Vec<Option<f64>>,
+    peaks_indices: Vec<usize>,
+    sample_rate: f64,
+    start: f64,
+    end: f64,
+    overrides: Vec<ReviewRange>,
+    #[serde(default)]
+    ancillary: std::collections::HashMap<String, Vec<Option<f64>>>,
+    #[serde(default)]
+    epoch_times: Vec<f64>,
+}
+#[derive(serde::Deserialize)]
+struct ReviewRange {
+    start: f64,
+    end: f64,
+    include: bool,
+}
+
+fn review_signal(req: ReviewRequest) -> Result<SessionAnalysisResult, String> {
+    use crate::pipeline::{generate_gapless_segments, PPGPreprocessResult};
+    use crate::{
+        compute_poincare_data, compute_time_resolved_hrv, detect_beats, generate_feature_summary,
+        interp_1d,
+    };
+    let n = req.time.len();
+    if n < 2
+        || !req.sample_rate.is_finite()
+        || req.sample_rate <= 0.0
+        || req.filtered.len() != n
+        || req.norm_ppg.len() != n
+        || req.usable_mask.len() != n
+        || req.pulse_mask.len() != n
+        || req.quality_trace.len() != n
+        || !req.start.is_finite()
+        || !req.end.is_finite()
+        || req.end <= req.start
+        || req.time.windows(2).any(|w| w[1] <= w[0])
+    {
+        return Err("Invalid signal arrays or selection".into());
+    }
+    let first = req.time.partition_point(|t| *t < req.start);
+    let last = req.time.partition_point(|t| *t <= req.end);
+    if last.saturating_sub(first) < 2 {
+        return Err("Select at least two signal samples".into());
+    }
+    let offset = req.time[first];
+    let time: Vec<f64> = req.time[first..last].iter().map(|t| t - offset).collect();
+    let filtered: Vec<f64> = req.filtered[first..last]
+        .iter()
+        .map(|v| v.unwrap_or(0.0))
+        .collect();
+    let usable = req.usable_mask[first..last].to_vec();
+    let mut pulse = req.pulse_mask[first..last].to_vec();
+    let mut included = vec![false; last - first];
+    for range in &req.overrides {
+        if !range.start.is_finite() || !range.end.is_finite() || range.end <= range.start {
+            return Err("Invalid review range".into());
+        }
+        for i in 0..pulse.len() {
+            let t = time[i] + offset;
+            if t >= range.start && t < range.end {
+                // Structural defects remain unavailable; a quality override cannot restore missing samples.
+                pulse[i] = range.include && usable[i] && req.filtered[first + i].is_some();
+                included[i] = pulse[i];
+            }
+        }
+    }
+    let mut peaks: Vec<usize> = req
+        .peaks_indices
+        .iter()
+        .filter_map(|p| {
+            if *p >= first && *p < last && pulse[*p - first] {
+                Some(*p - first)
+            } else {
+                None
+            }
+        })
+        .collect();
+    // Re-detect only manually included runs; keep original detections elsewhere.
+    let mut i = 0;
+    while i < included.len() {
+        if !included[i] {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < included.len() && included[i] {
+            i += 1;
+        }
+        peaks.retain(|p| *p < start || *p >= i);
+        peaks.extend(
+            detect_beats(&filtered[start..i], req.sample_rate, f64::NAN)
+                .iter()
+                .map(|p| p + start),
+        );
+    }
+    peaks.sort_unstable();
+    peaks.dedup();
+    let mut separated: Vec<usize> = Vec::new();
+    for peak in peaks {
+        if let Some(last) = separated.last_mut() {
+            if peak - *last < (req.sample_rate * 0.30).round() as usize {
+                if filtered[peak] > filtered[*last] {
+                    *last = peak;
+                }
+                continue;
+            }
+        }
+        separated.push(peak);
+    }
+    let peaks = separated;
+    let prep = PPGPreprocessResult {
+        time: time.clone(),
+        filtered: filtered.clone(),
+        raw_grid: vec![],
+        usable: usable.clone(),
+        pulse: pulse.clone(),
+        quality_trace: req.quality_trace[first..last]
+            .iter()
+            .map(|v| v.unwrap_or(0.0))
+            .collect(),
+        norm_ppg: req.norm_ppg[first..last]
+            .iter()
+            .map(|v| v.unwrap_or(0.0))
+            .collect(),
+        fs: req.sample_rate,
+        windows: vec![],
+        coverage: 0.0,
+    };
+    let (segments, _) = generate_gapless_segments(&prep);
+    let duration = *time.last().unwrap();
+    let coverage = segments
+        .iter()
+        .filter(|s| s.is_good)
+        .map(|s| s.duration_s)
+        .sum::<f64>()
+        / duration
+        * 100.0;
+    let mut hrv = compute_time_resolved_hrv(
+        &time,
+        &filtered,
+        &peaks,
+        req.sample_rate,
+        60.0,
+        15.0,
+        Some(&pulse),
+    );
+    for (key, values) in req.ancillary {
+        if values.len() == req.epoch_times.len() && !values.is_empty() {
+            let vals: Vec<f64> = values.iter().map(|v| v.unwrap_or(f64::NAN)).collect();
+            let targets: Vec<f64> = hrv.timestamps.iter().map(|t| t + offset).collect();
+            hrv.metrics
+                .insert(key, interp_1d(&targets, &req.epoch_times, &vals));
+        }
+    }
+    let peak_times: Vec<f64> = peaks.iter().map(|p| time[*p]).collect();
+    let rr: Vec<f64> = peaks
+        .windows(2)
+        .map(|w| {
+            if pulse[w[0]..=w[1]].iter().all(|v| *v) {
+                (time[w[1]] - time[w[0]]) * 1000.0
+            } else {
+                f64::NAN
+            }
+        })
+        .collect();
+    let poincare = compute_poincare_data(&rr, Some(&peak_times));
+    let summary = generate_feature_summary(&hrv.metrics);
+    Ok(SessionAnalysisResult {
+        total_duration_s: duration,
+        start_time_of_day_s: offset,
+        sample_rate: req.sample_rate,
+        coverage_pct: coverage,
+        accepted_window_count: 0,
+        total_window_count: 0,
+        time,
+        filtered,
+        norm_ppg: prep.norm_ppg,
+        usable_mask: usable,
+        pulse_mask: pulse,
+        quality_trace: prep.quality_trace,
+        sigmot_trace: if req.sigmot_trace.len() == n {
+            req.sigmot_trace[first..last]
+                .iter()
+                .map(|v| v.unwrap_or(0.0))
+                .collect()
+        } else {
+            vec![0.0; last - first]
+        },
+        peaks_indices: peaks,
+        gapless_segments: segments,
+        windows: vec![],
+        hrv,
+        poincare,
+        summary,
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn sensio_review_signal(ptr: *const c_char) -> *mut c_char {
+    let result = std::panic::catch_unwind(|| {
+        if ptr.is_null() {
+            return Err("Missing review request".to_string());
+        }
+        let text = unsafe { CStr::from_ptr(ptr) }
+            .to_str()
+            .map_err(|e| e.to_string())?;
+        let req: ReviewRequest = serde_json::from_str(text).map_err(|e| e.to_string())?;
+        review_signal(req)
+    })
+    .unwrap_or_else(|_| Err("Unable to recalculate selection".into()));
+    let resp = match result {
+        Ok(data) => FfiResponse {
+            success: true,
+            error: None,
+            data: Some(data),
+        },
+        Err(error) => FfiResponse {
+            success: false,
+            error: Some(error),
+            data: None,
+        },
+    };
+    to_c_string(serde_json::to_string(&resp).unwrap())
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    fn request() -> ReviewRequest {
+        let n = 6001;
+        ReviewRequest {
+            time: (0..n).map(|i| i as f64 / 50.0).collect(),
+            filtered: (0..n)
+                .map(|i| Some((i as f64 * std::f64::consts::TAU / 50.0).sin()))
+                .collect(),
+            norm_ppg: vec![Some(0.0); n],
+            usable_mask: vec![true; n],
+            pulse_mask: vec![true; n],
+            quality_trace: vec![Some(0.9); n],
+            sigmot_trace: vec![Some(0.0); n],
+            peaks_indices: (1..120).map(|i| i * 50).collect(),
+            sample_rate: 50.0,
+            start: 0.0,
+            end: 120.0,
+            overrides: vec![],
+            ancillary: Default::default(),
+            epoch_times: vec![],
+        }
+    }
+    #[test]
+    fn exclude_recomputes_coverage_beats_and_never_bridges_gap() {
+        let mut req = request();
+        req.overrides.push(ReviewRange {
+            start: 40.0,
+            end: 60.0,
+            include: false,
+        });
+        let res = review_signal(req).unwrap();
+        assert!((res.coverage_pct - 100.0 * 100.0 / 120.0).abs() < 0.01);
+        assert!(res.peaks_indices.iter().all(|p| *p < 2000 || *p >= 3000));
+        assert!(res
+            .poincare
+            .timestamps
+            .iter()
+            .all(|t| *t < 38.0 || *t >= 60.0));
+    }
+    #[test]
+    fn subregion_recomputes_from_selected_samples_and_rebases_time() {
+        let mut req = request();
+        req.start = 30.0;
+        req.end = 90.0;
+        let res = review_signal(req).unwrap();
+        assert_eq!(res.time[0], 0.0);
+        assert_eq!(res.total_duration_s, 60.0);
+        assert_eq!(res.peaks_indices.len(), 61);
+        assert_eq!(res.hrv.timestamps.len(), 1);
+        assert!(res.poincare.timestamps.iter().all(|t| *t <= 60.0));
+    }
+    #[test]
+    fn include_redetects_quality_rejections_but_not_structural_defects() {
+        let mut req = request();
+        req.pulse_mask.fill(false);
+        req.peaks_indices.clear();
+        req.usable_mask[2000..3000].fill(false);
+        req.overrides.push(ReviewRange {
+            start: 0.0,
+            end: 120.0,
+            include: true,
+        });
+        let res = review_signal(req).unwrap();
+        assert!(!res.peaks_indices.is_empty());
+        assert!(res.pulse_mask[2000..3000].iter().all(|v| !v));
+    }
+    #[test]
+    fn invalid_arrays_and_empty_region_are_rejected() {
+        let mut req = request();
+        req.filtered.pop();
+        assert!(review_signal(req).is_err());
+        let mut req = request();
+        req.end = req.start;
+        assert!(review_signal(req).is_err());
     }
 }

@@ -5,7 +5,8 @@ import 'package:ffi/ffi.dart';
 /// FFI bindings to native `libsensio_ppg_core`
 class SensioNativeBindings {
   SensioNativeBindings._(DynamicLibrary lib)
-    : _getVersion = lib
+    : _library = lib,
+      _getVersion = lib
           .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
             'sensio_get_version',
           ),
@@ -20,6 +21,7 @@ class SensioNativeBindings {
             void Function(Pointer<Utf8>)
           >('sensio_free_string');
 
+  final DynamicLibrary _library;
   final Pointer<Utf8> Function() _getVersion;
   final Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, double)
   _processFile;
@@ -68,7 +70,8 @@ class SensioNativeBindings {
     if (Platform.isMacOS) {
       final exe = File(Platform.resolvedExecutable);
       final exeDir = exe.parent.path;
-      final bundleFrameworksPath = '${exe.parent.parent.path}/Frameworks/libsensio_ppg_core.dylib';
+      final bundleFrameworksPath =
+          '${exe.parent.parent.path}/Frameworks/libsensio_ppg_core.dylib';
       final current = Directory.current.path;
       final paths = [
         bundleFrameworksPath,
@@ -127,7 +130,9 @@ class SensioNativeBindings {
         }
       }
       try {
-        return SensioNativeBindings._(DynamicLibrary.open('libsensio_ppg_core.so'));
+        return SensioNativeBindings._(
+          DynamicLibrary.open('libsensio_ppg_core.so'),
+        );
       } catch (e) {
         lastLoadError = 'open(libsensio_ppg_core.so): $e';
       }
@@ -153,7 +158,9 @@ class SensioNativeBindings {
         }
       }
       try {
-        return SensioNativeBindings._(DynamicLibrary.open('sensio_ppg_core.dll'));
+        return SensioNativeBindings._(
+          DynamicLibrary.open('sensio_ppg_core.dll'),
+        );
       } catch (e) {
         lastLoadError = 'open(sensio_ppg_core.dll): $e';
       }
@@ -161,6 +168,26 @@ class SensioNativeBindings {
     }
 
     return null;
+  }
+
+  String reviewSignal(String request) {
+    final fn = _library
+        .lookupFunction<
+          Pointer<Utf8> Function(Pointer<Utf8>),
+          Pointer<Utf8> Function(Pointer<Utf8>)
+        >('sensio_review_signal');
+    final input = request.toNativeUtf8();
+    try {
+      final output = fn(input);
+      if (output == nullptr) throw StateError('Review returned no result');
+      try {
+        return output.toDartString();
+      } finally {
+        _freeString(output);
+      }
+    } finally {
+      calloc.free(input);
+    }
   }
 
   String getVersion() {

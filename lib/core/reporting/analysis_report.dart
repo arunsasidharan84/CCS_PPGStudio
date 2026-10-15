@@ -9,7 +9,18 @@ class ReportSession {
   final String label;
   final String filename;
   final SessionAnalysisResult result;
-  const ReportSession(this.label, this.filename, this.result);
+  final double? regionStartS, regionEndS;
+  final String? experimentTitle;
+  final List<String> reviewNotes;
+  const ReportSession(
+    this.label,
+    this.filename,
+    this.result, {
+    this.regionStartS,
+    this.regionEndS,
+    this.experimentTitle,
+    this.reviewNotes = const [],
+  });
 }
 
 class AnalysisReport {
@@ -43,6 +54,7 @@ class AnalysisReport {
     if (sessions.isEmpty || sessions.length > 2) {
       throw ArgumentError('Select one or two sessions.');
     }
+    if (sessions.length == 2) return _comparison(sessions);
     final doc = pw.Document(
       title: sessions.length == 2
           ? 'PPG comparison report'
@@ -140,16 +152,25 @@ class AnalysisReport {
 
     page(
       comparison
-          ? 'Two recordings. One clear comparison.'
+          ? (sessions.first.experimentTitle?.isNotEmpty == true
+                ? sessions.first.experimentTitle!
+                : 'Two recordings. One clear comparison.')
           : 'Your recording at a glance',
       [
         note(
-          'Generated ${DateTime.now().toIso8601String().substring(0, 16)}. Scope: full recordings. App display zoom or selection does not trim this report.',
+          'Generated ${DateTime.now().toIso8601String().substring(0, 16)}. Scope: explicitly listed session regions. Feature epochs are recalculated within each selected region.',
         ),
         for (final session in sessions) ...[
           pw.SizedBox(height: 12),
           heading(session.label),
           note(session.filename),
+          note(
+            session.regionStartS == null
+                ? 'Scope: full recording'
+                : 'Source region: ${session.regionStartS!.toStringAsFixed(2)} to ${session.regionEndS!.toStringAsFixed(2)} seconds (elapsed). Charts use time relative to this region.',
+          ),
+          if (session.reviewNotes.isNotEmpty)
+            note('Manual review: ${session.reviewNotes.join('; ')}'),
           table(
             ['Session', 'Value'],
             [
@@ -183,7 +204,9 @@ class AnalysisReport {
               ['Accepted beats', '${session.result.peaksIndices.length}'],
               [
                 'Accepted quality windows',
-                '${session.result.acceptedWindowCount} / ${session.result.totalWindowCount}',
+                session.result.totalWindowCount == 0
+                    ? 'Recalculated from reviewed signal mask'
+                    : '${session.result.acceptedWindowCount} / ${session.result.totalWindowCount}',
               ],
               [
                 'Feature epochs',
@@ -312,7 +335,7 @@ class AnalysisReport {
           ChartSvg.line(
             r.time,
             r.qualityTrace,
-            'Signal quality across the full recording',
+            'Signal quality across the reported region',
             unit: '0-1 score',
           ),
           height: 145,
@@ -401,6 +424,203 @@ class AnalysisReport {
       ),
       note(
         'Charlton et al. (2025), The MSPTDfast photoplethysmography beat detection algorithm: design, benchmarking, and open-source distribution. doi:10.1088/1361-6579/adb89e. Consulted for detector evaluation and quality assessment; this application is not an implementation of MSPTDfast.',
+      ),
+    ]);
+    return doc.save();
+  }
+
+  static Future<Uint8List> _comparison(List<ReportSession> sessions) async {
+    final doc = pw.Document(
+      title: sessions.first.experimentTitle ?? 'PPG experiment',
+      author: 'CCS PPGStudio',
+    );
+    final a = sessions[0], b = sessions[1];
+    final ga = PoincareGeometry.forData(a.result.poincare),
+        gb = PoincareGeometry.forData(b.result.poincare);
+    final bounds = PoincareGeometry(
+      math.min(ga.low, gb.low),
+      math.max(ga.high, gb.high),
+    );
+    pw.Widget table(List<String> headers, List<List<String>> rows) =>
+        pw.TableHelper.fromTextArray(
+          headers: headers,
+          data: rows.map((r) => r.map(clean).toList()).toList(),
+          headerStyle: pw.TextStyle(
+            fontSize: 9,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.white,
+          ),
+          headerDecoration: pw.BoxDecoration(color: navy),
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          cellPadding: const pw.EdgeInsets.all(5),
+          border: null,
+          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blue50),
+        );
+    String scope(ReportSession s) => s.regionStartS == null
+        ? 'Full recording'
+        : '${number(s.regionStartS)} - ${number(s.regionEndS)} s';
+    void page(List<pw.Widget> body) => doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        header: (_) => pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 14),
+          child: pw.Text(
+            'CCS PPGStudio / EXPERIMENT',
+            style: pw.TextStyle(color: blue, fontWeight: pw.FontWeight.bold),
+          ),
+        ),
+        footer: (c) => pw.Text(
+          'Descriptive PPG comparison  |  ${c.pageNumber} / ${c.pagesCount}',
+          style: const pw.TextStyle(fontSize: 8),
+        ),
+        build: (_) => body,
+      ),
+    );
+    page([
+      pw.Text(
+        clean(
+          a.experimentTitle?.isNotEmpty == true
+              ? a.experimentTitle!
+              : 'Session comparison',
+        ),
+        style: pw.TextStyle(
+          fontSize: 26,
+          fontWeight: pw.FontWeight.bold,
+          color: navy,
+        ),
+      ),
+      pw.SizedBox(height: 8),
+      pw.Text(
+        'Generated ${DateTime.now().toIso8601String().substring(0, 16)}',
+        style: const pw.TextStyle(fontSize: 9),
+      ),
+      pw.SizedBox(height: 16),
+      table(
+        ['Experiment', 'A: ${clean(a.label)}', 'B: ${clean(b.label)}'],
+        [
+          ['Recording', a.filename, b.filename],
+          ['Source region (elapsed)', scope(a), scope(b)],
+          [
+            'Selected duration',
+            '${number(a.result.totalDurationS)} s',
+            '${number(b.result.totalDurationS)} s',
+          ],
+          [
+            'Accepted signal',
+            '${number(a.result.coveragePct)}%',
+            '${number(b.result.coveragePct)}%',
+          ],
+          [
+            'Accepted beats',
+            '${a.result.peaksIndices.length}',
+            '${b.result.peaksIndices.length}',
+          ],
+          ['Pipeline', a.result.pipelineMode, b.result.pipelineMode],
+        ],
+      ),
+      pw.SizedBox(height: 18),
+      pw.Text(
+        'Pulse geometry / shared axes',
+        style: pw.TextStyle(
+          fontSize: 16,
+          color: navy,
+          fontWeight: pw.FontWeight.bold,
+        ),
+      ),
+      pw.SizedBox(height: 8),
+      pw.Row(
+        children: [
+          for (final s in sessions)
+            pw.Expanded(
+              child: pw.SizedBox(
+                height: 220,
+                child: pw.SvgImage(
+                  svg: ChartSvg.poincare(
+                    s.result.poincare,
+                    bounds: bounds,
+                    title: clean(s.label),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      pw.SizedBox(height: 10),
+      pw.Text(
+        'Features are recalculated within each selected region. Short or low-quality selections may have no valid feature epochs. Charts use identical axes; rejected gaps do not create new interval neighbors.',
+        style: const pw.TextStyle(fontSize: 9),
+      ),
+      if ((a.result.totalDurationS - b.result.totalDurationS).abs() > 1)
+        pw.Text(
+          'Selected durations differ. Review duration and recording conditions when interpreting changes.',
+          style: const pw.TextStyle(fontSize: 9),
+        ),
+    ]);
+    final am = {for (final r in a.result.summary) r.metric: r},
+        bm = {for (final r in b.result.summary) r.metric: r};
+    final keys = {...am.keys, ...bm.keys}.toList()..sort();
+    page([
+      pw.Text(
+        'Feature changes',
+        style: pw.TextStyle(
+          fontSize: 22,
+          fontWeight: pw.FontWeight.bold,
+          color: navy,
+        ),
+      ),
+      pw.SizedBox(height: 8),
+      pw.Text(
+        'Delta = B - A. Change % = delta / abs(A) x 100; zero baselines and unavailable features are N/A. Direction does not indicate benefit or statistical significance. Values summarize overlapping epochs, not independent observations.',
+        style: const pw.TextStyle(fontSize: 9),
+      ),
+      pw.SizedBox(height: 12),
+      table(
+        ['Metric / unit', 'A', 'B', 'Delta', 'Change %'],
+        [
+          for (final k in keys)
+            [
+              '$k (${unit(k)})',
+              number(am[k]?.mean),
+              number(bm[k]?.mean),
+              am[k] != null && bm[k] != null
+                  ? number(bm[k]!.mean - am[k]!.mean)
+                  : 'N/A',
+              am[k] != null && bm[k] != null && am[k]!.mean.abs() > 1e-12
+                  ? number(
+                      (bm[k]!.mean - am[k]!.mean) / am[k]!.mean.abs() * 100,
+                    )
+                  : 'N/A',
+            ],
+        ],
+      ),
+      if (keys.isEmpty)
+        pw.Text(
+          'No valid feature epochs. Select a longer region with accepted signal.',
+        ),
+      pw.SizedBox(height: 16),
+      pw.Text(
+        'Manual review / source timeline',
+        style: pw.TextStyle(
+          fontSize: 13,
+          fontWeight: pw.FontWeight.bold,
+          color: navy,
+        ),
+      ),
+      for (final s in sessions)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 6),
+          child: pw.Text(
+            clean(
+              '${s.label}: ${s.reviewNotes.isEmpty ? 'No manual corrections' : s.reviewNotes.join('; ')}',
+            ),
+            style: const pw.TextStyle(fontSize: 9),
+          ),
+        ),
+      pw.SizedBox(height: 10),
+      pw.Text(
+        'PPG-derived pulse variability is not ECG-confirmed NN variability. Differences may reflect quality, duration, activity, sensor conditions or experimental effects. No significance test or universal normal range is applied.',
+        style: const pw.TextStyle(fontSize: 9),
       ),
     ]);
     return doc.save();

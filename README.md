@@ -209,7 +209,7 @@ Enables head-to-head comparison between two recordings (e.g., Pre vs. Post inter
 * **Side-by-Side Poincaré Scatter Maps**: Direct visual comparison of ellipse orientation, $SD1$ dispersion, and $SD2$ elongation.
 * **Quantitative Shift Matrix ($\Delta$ & $\Delta \%$)**:
   $$\Delta \% = \left(\frac{\text{Session}_2 - \text{Session}_1}{\text{Session}_1}\right) \times 100$$
-* Color-coded directional badges indicating significant autonomic increases or reductions.
+* Directional change badges without implying statistical significance or clinical benefit.
 
 ---
 
@@ -310,3 +310,48 @@ cd rust && cargo test && cd ..
 3. **Elgendi, M.** (2012). *On the analysis of fingertip photoplethysmogram signals.* Current Cardiology Reviews, 8(1), 14–25.
 4. **Mateo, J., & Laguna, P.** (2000). *Analysis of heart rate variability in the presence of ectopic beats using the heart timing signal.* IEEE Transactions on Biomedical Engineering, 47(7), 896–907.
 5. **Orphanidou, C., et al.** (2015). *Signal-quality indices for the electrocardiogram and photoplethysmogram: deriving native indices.* IEEE Journal of Biomedical and Health Informatics, 19(3), 832–839.
+
+## Experiment workspace (1.1.0)
+
+Open a recording and use the visible **Compare sessions** action above the analysis tabs.
+
+1. Give the experiment and its baseline/intervention sessions meaningful names.
+2. Choose session B. Saved detection corrections are loaded automatically.
+3. Select an independent region in A and B with the range handles, or enter exact elapsed seconds and submit the field. **Full session** restores the complete range.
+4. Press **Compare selected regions**. Both signals are recalculated with the Standard pipeline, using only samples within each region. Summary values, coverage, accepted beats and Poincaré plots all refer to those regions; precomputed epochs outside the selection are not reused.
+5. Review the shared-scale pulse geometry, coverage, duration and feature changes. Filter by feature domain, then use **Create experiment PDF** to preview, print, save or share the report.
+
+The PDF records the experiment title, labels, source filenames, source elapsed-time boundaries, pipeline and manual corrections. Its charts start at zero for each selected region. Changes are descriptive, not a statistical test or a clinical benefit score. Percent change is `(B - A) / abs(A) × 100`; a zero baseline or unavailable metric produces N/A. Short or poor-quality regions can have no valid feature epochs. Match durations and recording conditions when designing experiments.
+
+### Correct detection decisions on phone or desktop
+
+Use **Review detections** above the analysis tabs. Tap a quality episode to select it, adjust the range as needed, then choose:
+
+- **Include region**: override quality rejection and rerun beat detection on usable signal in that range.
+- **Exclude region**: remove the region's detections from downstream analysis.
+- **Revert region**: restore the app's original decision within the range, preserving corrections elsewhere.
+- **Undo**: reverse the most recent review action in the current review screen.
+- **Reset all**: restore automatic decisions for the whole session.
+
+Coverage, beats, features and reports are recalculated after each change. Rejected gaps cannot create artificial neighboring interval pairs. Missing samples and structural defects remain unavailable even when a region is manually included. Reviewed analyses use the Standard pipeline to avoid smoothing across excluded regions. Corrections persist locally for the same source path, file size and modification time; replacing the recording starts a new review. Corrections are not written into the source recording. Use **Done** to return to analysis.
+
+### Desktop releases and updates
+
+The same Flutter interface and Rust analysis engine ship on macOS, Windows, Linux, Android and iOS. GitHub version tags build macOS ZIP, Windows ZIP, Linux x64 tar.gz, Android APK/AAB and an unsigned iOS build. macOS requires version 12 or later and iOS requires version 15 or later. Linux requires a GTK 3 desktop; the release build uses Ubuntu 22.04. Build Linux locally with `./scripts/build_linux.sh`.
+
+On desktop, choose **Check for updates** in the app menu. The app checks stable releases from this repository, downloads the matching package, verifies it against the release's `SHA256SUMS`, and offers **Install and restart**. Finish work before restarting. Updates retain a timestamped `.previous-*` installation backup and restore it if package replacement fails. The installation parent folder must be writable. macOS packages are also checked with `codesign`; GitHub desktop builds use ad hoc signatures rather than notarization. Windows and Linux installers must still be verified on their respective operating systems before broad rollout. SHA-256 verifies package integrity against the repository's manifest, not independent publisher identity.
+
+Android distribution uses `./scripts/deploy_firebase.sh` (always rebuilds before upload). iOS uses `./scripts/deploy_testflight.sh`, which prepares the native framework from source, archives the signed app and uploads to App Store Connect. Signing credentials and provisioning profiles must already be configured locally. Optional GitHub workflow distribution requires the corresponding Firebase/App Store secrets; requested uploads fail explicitly when credentials are absent. Unsigned GitHub iOS archives cannot be installed through TestFlight.
+
+### Validation
+
+```sh
+cargo test --manifest-path rust/Cargo.toml
+cargo build --manifest-path rust/Cargo.toml --release
+mkdir -p macos/Frameworks
+cp rust/target/release/libsensio_ppg_core.dylib macos/Frameworks/ # macOS tests
+flutter analyze
+flutter test
+```
+
+The regression suite covers region-only recalculation, rejection exclusion without gap bridging, inclusion constrained by structural validity, partial revert, review persistence/file replacement, numeric version ordering, comparison PDF generation, and portrait/landscape/desktop layouts. Platform packages should be smoke-tested on each target OS before distribution to a broader audience.
