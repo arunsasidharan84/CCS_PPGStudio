@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/ppg_models.dart';
 import 'chart_svg.dart';
+import 'comparison_presentation.dart';
 
 class ReportSession {
   final String label;
@@ -12,6 +13,7 @@ class ReportSession {
   final double? regionStartS, regionEndS;
   final String? experimentTitle;
   final List<String> reviewNotes;
+  final String? sourcePath, provenanceNote;
   const ReportSession(
     this.label,
     this.filename,
@@ -20,6 +22,8 @@ class ReportSession {
     this.regionEndS,
     this.experimentTitle,
     this.reviewNotes = const [],
+    this.sourcePath,
+    this.provenanceNote,
   });
 }
 
@@ -50,11 +54,46 @@ class AnalysisReport {
       .replaceAll('—', '-')
       .replaceAll(RegExp(r'[^\x20-\x7E\n]'), '');
 
-  static Future<Uint8List> generate(List<ReportSession> sessions) async {
+  static String conditionName(ReportSession s) =>
+      ComparisonPresentation.condition(s.label, s.filename);
+  static String reportTitle(List<ReportSession> sessions) =>
+      sessions.length == 2
+      ? ComparisonPresentation.title(
+          conditionName(sessions[0]),
+          conditionName(sessions[1]),
+          sessions.first.experimentTitle,
+        )
+      : conditionName(sessions.first);
+  static String suggestedFilename(
+    List<ReportSession> sessions, {
+    bool includeDetails = false,
+  }) {
+    final date = sessions.first.result.sessionStartDateTime ?? DateTime.now();
+    if (sessions.length == 1) {
+      return '${date.toIso8601String().substring(0, 10)}_${ComparisonPresentation.slug(conditionName(sessions.first))}_report.pdf';
+    }
+    String region(ReportSession s) => s.regionStartS == null
+        ? 'full'
+        : '${s.regionStartS!.toStringAsFixed(2)}-${s.regionEndS!.toStringAsFixed(2)}s';
+    return ComparisonPresentation.filename(
+      conditionName(sessions[0]),
+      conditionName(sessions[1]),
+      date,
+      details: includeDetails,
+      regions: 'A-${region(sessions[0])}_B-${region(sessions[1])}',
+    );
+  }
+
+  static Future<Uint8List> generate(
+    List<ReportSession> sessions, {
+    bool includeDetails = false,
+  }) async {
     if (sessions.isEmpty || sessions.length > 2) {
       throw ArgumentError('Select one or two sessions.');
     }
-    if (sessions.length == 2) return _comparison(sessions);
+    if (sessions.length == 2) {
+      return _comparison(sessions, includeDetails: includeDetails);
+    }
     final doc = pw.Document(
       title: sessions.length == 2
           ? 'PPG comparison report'
@@ -429,200 +468,346 @@ class AnalysisReport {
     return doc.save();
   }
 
-  static Future<Uint8List> _comparison(List<ReportSession> sessions) async {
+  static Future<Uint8List> _comparison(
+    List<ReportSession> sessions, {
+    bool includeDetails = false,
+  }) async {
+    final a = sessions[0], b = sessions[1];
+    final names = sessions.map(conditionName).toList();
     final doc = pw.Document(
-      title: sessions.first.experimentTitle ?? 'PPG experiment',
+      title: clean(reportTitle(sessions)),
       author: 'CCS PPGStudio',
     );
-    final a = sessions[0], b = sessions[1];
+    final ca = PdfColor.fromHex(ComparisonPresentation.colorA),
+        cb = PdfColor.fromHex(ComparisonPresentation.colorB);
+    final muted = PdfColor.fromHex('#526478'),
+        pale = PdfColor.fromHex('#F3F6FA');
+    pw.Widget text(
+      String value, {
+      double size = 9,
+      PdfColor? color,
+      bool bold = false,
+    }) => pw.Text(
+      clean(value),
+      style: pw.TextStyle(
+        fontSize: size,
+        color: color ?? navy,
+        fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      ),
+    );
+    pw.Widget section(String label, String caption) => pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 12, bottom: 6),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          text(label, size: 12, bold: true),
+          text(caption, size: 8, color: muted),
+        ],
+      ),
+    );
+    String scope(ReportSession s) => s.regionStartS == null
+        ? 'Full recording'
+        : '${number(s.regionStartS)} - ${number(s.regionEndS)} s';
+    pw.Widget condition(int index) {
+      final s = sessions[index], r = s.result;
+      final n = ComparisonMetric.highlights.first.count(r);
+      return pw.Container(
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          color: pale,
+          border: pw.Border.all(color: index == 0 ? ca : cb, width: .8),
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            text(
+              '${index == 0 ? 'A' : 'B'}  ${names[index]}',
+              size: 13,
+              color: index == 0 ? ca : cb,
+              bold: true,
+            ),
+            pw.SizedBox(height: 5),
+            text(
+              '${s.provenanceNote == null ? r.totalDurationS.toStringAsFixed(1) : '~${r.totalDurationS.toStringAsFixed(0)}'} s  |  ${r.coveragePct.toStringAsFixed(1)}% accepted  |  ${r.peaksIndices.length} beats',
+              size: 8,
+            ),
+            pw.SizedBox(height: 3),
+            text(
+              '$n valid HR epoch${n == 1 ? '' : 's'}  |  ${scope(s)}',
+              size: 8,
+              color: muted,
+            ),
+          ],
+        ),
+      );
+    }
+
+    pw.Widget metric(ComparisonMetric m) => pw.Container(
+      height: 91,
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300, width: .5),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          text('${m.title} (${m.unit})', size: 9, bold: true),
+          pw.Expanded(
+            child: pw.SvgImage(
+              svg: ChartSvg.pairedMetric(m, a.result, b.result),
+            ),
+          ),
+          text(
+            'Valid epochs  A ${m.count(a.result)}  /  B ${m.count(b.result)}',
+            size: 7,
+            color: muted,
+          ),
+        ],
+      ),
+    );
+    final cautions = ComparisonPresentation.cautions(a.result, b.result);
+    final geometryAvailable =
+        a.result.poincare.x.isNotEmpty || b.result.poincare.x.isNotEmpty;
     final ga = PoincareGeometry.forData(a.result.poincare),
         gb = PoincareGeometry.forData(b.result.poincare);
     final bounds = PoincareGeometry(
       math.min(ga.low, gb.low),
       math.max(ga.high, gb.high),
     );
-    pw.Widget table(List<String> headers, List<List<String>> rows) =>
-        pw.TableHelper.fromTextArray(
-          headers: headers,
-          data: rows.map((r) => r.map(clean).toList()).toList(),
-          headerStyle: pw.TextStyle(
-            fontSize: 9,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColors.white,
-          ),
-          headerDecoration: pw.BoxDecoration(color: navy),
-          cellStyle: const pw.TextStyle(fontSize: 9),
-          cellPadding: const pw.EdgeInsets.all(5),
-          border: null,
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blue50),
-        );
-    String scope(ReportSession s) => s.regionStartS == null
-        ? 'Full recording'
-        : '${number(s.regionStartS)} - ${number(s.regionEndS)} s';
-    void page(List<pw.Widget> body) => doc.addPage(
-      pw.MultiPage(
+    final title = reportTitle(sessions);
+    doc.addPage(
+      pw.Page(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        header: (_) => pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 14),
-          child: pw.Text(
-            'CCS PPGStudio / EXPERIMENT',
-            style: pw.TextStyle(color: blue, fontWeight: pw.FontWeight.bold),
-          ),
-        ),
-        footer: (c) => pw.Text(
-          'Descriptive PPG comparison  |  ${c.pageNumber} / ${c.pagesCount}',
-          style: const pw.TextStyle(fontSize: 8),
-        ),
-        build: (_) => body,
-      ),
-    );
-    page([
-      pw.Text(
-        clean(
-          a.experimentTitle?.isNotEmpty == true
-              ? a.experimentTitle!
-              : 'Session comparison',
-        ),
-        style: pw.TextStyle(
-          fontSize: 26,
-          fontWeight: pw.FontWeight.bold,
-          color: navy,
-        ),
-      ),
-      pw.SizedBox(height: 8),
-      pw.Text(
-        'Generated ${DateTime.now().toIso8601String().substring(0, 16)}',
-        style: const pw.TextStyle(fontSize: 9),
-      ),
-      pw.SizedBox(height: 16),
-      table(
-        ['Experiment', 'A: ${clean(a.label)}', 'B: ${clean(b.label)}'],
-        [
-          ['Recording', a.filename, b.filename],
-          ['Source region (elapsed)', scope(a), scope(b)],
-          [
-            'Selected duration',
-            '${number(a.result.totalDurationS)} s',
-            '${number(b.result.totalDurationS)} s',
-          ],
-          [
-            'Accepted signal',
-            '${number(a.result.coveragePct)}%',
-            '${number(b.result.coveragePct)}%',
-          ],
-          [
-            'Accepted beats',
-            '${a.result.peaksIndices.length}',
-            '${b.result.peaksIndices.length}',
-          ],
-          ['Pipeline', a.result.pipelineMode, b.result.pipelineMode],
-        ],
-      ),
-      pw.SizedBox(height: 18),
-      pw.Text(
-        'Pulse geometry / shared axes',
-        style: pw.TextStyle(
-          fontSize: 16,
-          color: navy,
-          fontWeight: pw.FontWeight.bold,
-        ),
-      ),
-      pw.SizedBox(height: 8),
-      pw.Row(
-        children: [
-          for (final s in sessions)
-            pw.Expanded(
-              child: pw.SizedBox(
-                height: 220,
-                child: pw.SvgImage(
-                  svg: ChartSvg.poincare(
-                    s.result.poincare,
-                    bounds: bounds,
-                    title: clean(s.label),
-                  ),
+        margin: const pw.EdgeInsets.all(28),
+        build: (_) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                text(
+                  'CCS PPGSTUDIO / CONDITION COMPARISON',
+                  size: 8,
+                  color: muted,
+                  bold: true,
                 ),
+                text('VISUAL SUMMARY', size: 8, color: muted),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.SizedBox(
+              height: 42,
+              child: pw.FittedBox(
+                fit: pw.BoxFit.scaleDown,
+                alignment: pw.Alignment.centerLeft,
+                child: text(title, size: 23, bold: true),
               ),
             ),
-        ],
-      ),
-      pw.SizedBox(height: 10),
-      pw.Text(
-        'Features are recalculated within each selected region. Short or low-quality selections may have no valid feature epochs. Charts use identical axes; rejected gaps do not create new interval neighbors.',
-        style: const pw.TextStyle(fontSize: 9),
-      ),
-      if ((a.result.totalDurationS - b.result.totalDurationS).abs() > 1)
-        pw.Text(
-          'Selected durations differ. Review duration and recording conditions when interpreting changes.',
-          style: const pw.TextStyle(fontSize: 9),
-        ),
-    ]);
-    final am = {for (final r in a.result.summary) r.metric: r},
-        bm = {for (final r in b.result.summary) r.metric: r};
-    final keys = {...am.keys, ...bm.keys}.toList()..sort();
-    page([
-      pw.Text(
-        'Feature changes',
-        style: pw.TextStyle(
-          fontSize: 22,
-          fontWeight: pw.FontWeight.bold,
-          color: navy,
-        ),
-      ),
-      pw.SizedBox(height: 8),
-      pw.Text(
-        'Delta = B - A. Change % = delta / abs(A) x 100; zero baselines and unavailable features are N/A. Direction does not indicate benefit or statistical significance. Values summarize overlapping epochs, not independent observations.',
-        style: const pw.TextStyle(fontSize: 9),
-      ),
-      pw.SizedBox(height: 12),
-      table(
-        ['Metric / unit', 'A', 'B', 'Delta', 'Change %'],
-        [
-          for (final k in keys)
-            [
-              '$k (${unit(k)})',
-              number(am[k]?.mean),
-              number(bm[k]?.mean),
-              am[k] != null && bm[k] != null
-                  ? number(bm[k]!.mean - am[k]!.mean)
-                  : 'N/A',
-              am[k] != null && bm[k] != null && am[k]!.mean.abs() > 1e-12
-                  ? number(
-                      (bm[k]!.mean - am[k]!.mean) / am[k]!.mean.abs() * 100,
-                    )
-                  : 'N/A',
-            ],
-        ],
-      ),
-      if (keys.isEmpty)
-        pw.Text(
-          'No valid feature epochs. Select a longer region with accepted signal.',
-        ),
-      pw.SizedBox(height: 16),
-      pw.Text(
-        'Manual review / source timeline',
-        style: pw.TextStyle(
-          fontSize: 13,
-          fontWeight: pw.FontWeight.bold,
-          color: navy,
-        ),
-      ),
-      for (final s in sessions)
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 6),
-          child: pw.Text(
-            clean(
-              '${s.label}: ${s.reviewNotes.isEmpty ? 'No manual corrections' : s.reviewNotes.join('; ')}',
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(child: condition(0)),
+                pw.SizedBox(width: 10),
+                pw.Expanded(child: condition(1)),
+              ],
             ),
-            style: const pw.TextStyle(fontSize: 9),
-          ),
+            pw.SizedBox(height: 9),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(9),
+              decoration: pw.BoxDecoration(
+                color: cautions.isEmpty ? pale : PdfColor.fromHex('#FFF4DF'),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: text(
+                cautions.isEmpty
+                    ? 'Read as a descriptive comparison. A change is not proof of an experimental effect.'
+                    : cautions.take(2).join(' '),
+                size: 8.5,
+              ),
+            ),
+            section(
+              'Six measures at a glance',
+              'Teal = A   Purple = B   Change = B - A',
+            ),
+            for (var i = 0; i < ComparisonMetric.highlights.length; i += 2)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 7),
+                child: pw.Row(
+                  children: [
+                    pw.Expanded(child: metric(ComparisonMetric.highlights[i])),
+                    pw.SizedBox(width: 10),
+                    pw.Expanded(
+                      child: metric(ComparisonMetric.highlights[i + 1]),
+                    ),
+                  ],
+                ),
+              ),
+            if (geometryAvailable) ...[
+              section('Pulse geometry', 'Same axes for both conditions'),
+              pw.SizedBox(
+                width: PdfPageFormat.a4.width - 56,
+                height: 150,
+                child: pw.Row(
+                  children: [
+                    for (var i = 0; i < 2; i++)
+                      pw.Expanded(
+                        child: pw.SvgImage(
+                          svg: ChartSvg.poincareCompact(
+                            sessions[i].result.poincare,
+                            bounds,
+                            clean('${i == 0 ? 'A' : 'B'} - ${names[i]}'),
+                            i == 0
+                                ? ComparisonPresentation.colorA
+                                : ComparisonPresentation.colorB,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              section('Accepted signal coverage', 'Original exported values'),
+              for (var i = 0; i < 2; i++)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 8),
+                  child: pw.Row(
+                    children: [
+                      pw.SizedBox(
+                        width: 18,
+                        child: text(i == 0 ? 'A' : 'B', bold: true),
+                      ),
+                      pw.Expanded(
+                        child: pw.Stack(
+                          children: [
+                            pw.Container(height: 12, color: pale),
+                            pw.Container(
+                              height: 12,
+                              width:
+                                  420 *
+                                  sessions[i].result.coveragePct.clamp(0, 100) /
+                                  100,
+                              color: i == 0 ? ca : cb,
+                            ),
+                          ],
+                        ),
+                      ),
+                      pw.SizedBox(
+                        width: 45,
+                        child: text(
+                          '${sessions[i].result.coveragePct.toStringAsFixed(1)}%',
+                          size: 9,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            pw.Spacer(),
+            pw.Divider(color: PdfColors.grey300),
+            for (var i = 0; i < 2; i++)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 3),
+                child: text(
+                  '${i == 0 ? 'A' : 'B'}: ${sessions[i].filename} | ${scope(sessions[i])} | ${sessions[i].provenanceNote != null ? 'review not recorded in source PDF' : '${sessions[i].reviewNotes.length} manual corrections'}',
+                  size: 7,
+                  color: muted,
+                ),
+              ),
+            if (sessions.any((s) => s.provenanceNote != null))
+              text(
+                sessions
+                    .map((s) => s.provenanceNote)
+                    .whereType<String>()
+                    .toSet()
+                    .join(' '),
+                size: 7,
+                color: muted,
+              ),
+            text(
+              'PPG pulse variability; descriptive only. Bars show epoch means on a shared scale per metric. Geometry pools selected intervals. Counts are overlapping epochs. Full metrics ${includeDetails ? 'follow in the appendix' : 'are available in the optional appendix'}.',
+              size: 7,
+              color: muted,
+            ),
+            pw.SizedBox(height: 4),
+            text(
+              'Generated ${DateTime.now().toIso8601String().substring(0, 16)} | ${includeDetails ? 'Summary + detail appendix' : '1-page summary'}',
+              size: 7,
+              color: muted,
+            ),
+          ],
         ),
-      pw.SizedBox(height: 10),
-      pw.Text(
-        'PPG-derived pulse variability is not ECG-confirmed NN variability. Differences may reflect quality, duration, activity, sensor conditions or experimental effects. No significance test or universal normal range is applied.',
-        style: const pw.TextStyle(fontSize: 9),
       ),
-    ]);
+    );
+    if (includeDetails) {
+      final am = {for (final r in a.result.summary) r.metric: r},
+          bm = {for (final r in b.result.summary) r.metric: r};
+      final keys = {...am.keys, ...bm.keys}.toList()..sort();
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(28),
+          header: (_) => pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 12),
+            child: text('Full metrics / $title', size: 14, bold: true),
+          ),
+          footer: (c) => text(
+            'CCS PPGStudio | ${c.pageNumber} / ${c.pagesCount}',
+            size: 8,
+            color: muted,
+          ),
+          build: (_) => [
+            text(
+              'A: ${names[0]}    B: ${names[1]}. N = valid epochs. No statistical significance test is implied.',
+              size: 9,
+            ),
+            pw.SizedBox(height: 10),
+            pw.TableHelper.fromTextArray(
+              headers: ['Metric / unit', 'A', 'B', 'Change', 'N A/B'],
+              data: [
+                for (final k in keys)
+                  [
+                    '$k (${unit(k)})',
+                    number(am[k]?.mean),
+                    number(bm[k]?.mean),
+                    am[k] != null && bm[k] != null
+                        ? number(bm[k]!.mean - am[k]!.mean)
+                        : 'N/A',
+                    '${am[k]?.count ?? 0}/${bm[k]?.count ?? 0}',
+                  ],
+              ],
+              headerDecoration: pw.BoxDecoration(color: navy),
+              headerStyle: pw.TextStyle(
+                fontSize: 8,
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellPadding: const pw.EdgeInsets.all(4),
+              border: null,
+              oddRowDecoration: pw.BoxDecoration(color: pale),
+            ),
+            pw.SizedBox(height: 12),
+            for (final note in cautions)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 5),
+                child: text(note, size: 8),
+              ),
+            for (var i = 0; i < 2; i++) ...[
+              pw.SizedBox(height: 10),
+              text('${names[i]} / source and review', bold: true),
+              text(sessions[i].filename, size: 8),
+              text(
+                'Pipeline: ${sessions[i].result.pipelineMode}. Region: ${scope(sessions[i])}. Start: ${sessions[i].result.sessionStartDateTime?.toIso8601String() ?? 'unknown'}.',
+                size: 8,
+              ),
+              for (final note in sessions[i].reviewNotes) text(note, size: 8),
+            ],
+          ],
+        ),
+      );
+    }
     return doc.save();
   }
 

@@ -311,17 +311,17 @@ cd rust && cargo test && cd ..
 4. **Mateo, J., & Laguna, P.** (2000). *Analysis of heart rate variability in the presence of ectopic beats using the heart timing signal.* IEEE Transactions on Biomedical Engineering, 47(7), 896–907.
 5. **Orphanidou, C., et al.** (2015). *Signal-quality indices for the electrocardiogram and photoplethysmogram: deriving native indices.* IEEE Journal of Biomedical and Health Informatics, 19(3), 832–839.
 
-## Experiment workspace (1.1.0)
+## Experiment workspace
 
 Open a recording and use the visible **Compare sessions** action above the analysis tabs.
 
-1. Give the experiment and its baseline/intervention sessions meaningful names.
+1. Give both conditions meaningful names in **Condition names & selected regions**.
 2. Choose session B. Saved detection corrections are loaded automatically.
 3. Select an independent region in A and B with the range handles, or enter exact elapsed seconds and submit the field. **Full session** restores the complete range.
 4. Press **Compare selected regions**. Both signals are recalculated with the Standard pipeline, using only samples within each region. Summary values, coverage, accepted beats and Poincaré plots all refer to those regions; precomputed epochs outside the selection are not reused.
-5. Review the shared-scale pulse geometry, coverage, duration and feature changes. Filter by feature domain, then use **Create experiment PDF** to preview, print, save or share the report.
+5. Review the shared-scale pulse geometry, coverage, duration and feature changes. Filter by feature domain, then use **1-page visual PDF** to preview, print, save or share the report.
 
-The PDF records the experiment title, labels, source filenames, source elapsed-time boundaries, pipeline and manual corrections. Its charts start at zero for each selected region. Changes are descriptive, not a statistical test or a clinical benefit score. Percent change is `(B - A) / abs(A) × 100`; a zero baseline or unavailable metric produces N/A. Short or poor-quality regions can have no valid feature epochs. Match durations and recording conditions when designing experiments.
+The summary records condition names, experiment title, source filenames and regions, coverage and epoch availability. Its optional appendix includes the full metric table, pipeline and review history. Paired bars show epoch means; the Poincaré panel uses pooled intervals within the selection. Changes are descriptive, not a statistical test or a clinical benefit score. The visual summary uses absolute changes; pNN50 changes use percentage points. Unavailable values remain N/A. Short or poor-quality regions can have no valid feature epochs. Match durations and recording conditions when designing experiments.
 
 ### Correct detection decisions on phone or desktop
 
@@ -355,3 +355,13 @@ flutter test
 ```
 
 The regression suite covers region-only recalculation, rejection exclusion without gap bridging, inclusion constrained by structural validity, partial revert, review persistence/file replacement, numeric version ordering, comparison PDF generation, and portrait/landscape/desktop layouts. Platform packages should be smoke-tested on each target OS before distribution to a broader audience.
+
+## Visual condition reports (1.2.0)
+
+Comparison exports now default to a **single-page visual summary**. Six paired bar charts show heart rate, RMSSD, SDNN, pNN50, SD1 and SD2 with a common scale for the two conditions within each measure. Accepted-signal coverage and valid epoch counts are visible before the feature changes; unequal quality and sparse data receive a prominent caution. Pooled Poincaré geometry is distinguished from epoch-mean feature values.
+
+Use **Condition names & selected regions** to name each condition (for example, *Standing pose* and *Half-bending forward pose*). Names are remembered locally per source recording. Meaningful filenames provide initial labels; generic session filenames cannot reveal a pose, so edit the name once. The experiment title follows the condition names unless you supply your own title.
+
+**1-page visual PDF** opens a preview with an editable, descriptive filename containing the recording date, both condition names, source regions and report scope. Enable **Include full metric appendix** only when you need all features and source/review details. The default summary never expands into the old multi-page waveform/trajectory dossier. In the comparison UI, six visual measures lead the results; pulse geometry and all remaining measures are expandable.
+
+The summary is descriptive. Larger changes are not automatically beneficial or statistically significant. A count of one valid epoch is shown explicitly and is not treated as repeated experimental evidence. A pNN50 change is expressed in percentage points, and missing values stay N/A instead of becoming zero.

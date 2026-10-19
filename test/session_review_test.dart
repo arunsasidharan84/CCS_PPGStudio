@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sensio_ppg_app/core/services/app_update_service.dart';
@@ -97,7 +98,18 @@ void main() {
         ),
       ]);
       expect(bytes.take(4), [37, 80, 68, 70]);
-      expect(bytes.length, greaterThan(10000));
+      expect(
+        RegExp(r'/Type\s*/Page\b').allMatches(latin1.decode(bytes)).length,
+        1,
+      );
+      final detail = await AnalysisReport.generate([
+        ReportSession('Standing pose', 'standing.csv', selected),
+        ReportSession('Half-bending forward pose', 'bending.csv', selected),
+      ], includeDetails: true);
+      expect(
+        RegExp(r'/Type\s*/Page\b').allMatches(latin1.decode(detail)).length,
+        greaterThan(1),
+      );
       if (Platform.environment['PPG_REPORT_QA'] == '1') {
         await Directory('tmp/pdfs').create(recursive: true);
         await File('tmp/pdfs/experiment.pdf').writeAsBytes(bytes);

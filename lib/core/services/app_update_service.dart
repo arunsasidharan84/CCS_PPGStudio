@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 class AppUpdateService {
-  static const currentVersion = '1.1.0';
+  static const currentVersion = '1.2.0';
   static const repository = 'arunsasidharan84/CCS_PPGStudio';
   static bool isNewer(String candidate, String current) {
     List<int> parts(String v) => v

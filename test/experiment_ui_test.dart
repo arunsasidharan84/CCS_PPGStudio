@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sensio_ppg_app/core/services/comparison_label_store.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +58,63 @@ void main() {
       await loader.load();
     }
   });
+  testWidgets(
+    'Condition edits update the overview, persist and prevent ambiguous exports',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: qaTheme(),
+          home: ComparisonScreen(
+            first: ReportSession(
+              'Standing pose',
+              'standing.csv',
+              fixture(),
+              sourcePath: '/a.csv',
+            ),
+            second: ReportSession(
+              'Bending pose',
+              'bending.csv',
+              fixture(),
+              sourcePath: '/b.csv',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Condition names & selected regions'));
+      await tester.pumpAndSettle();
+      final nameA = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == 'Condition A name',
+      );
+      await tester.ensureVisible(nameA);
+      await tester.enterText(nameA, 'Bending pose');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, '1-page visual PDF'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(nameA, 'Standing pose');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, '1-page visual PDF'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(await ComparisonLabelStore.load('/a.csv'), 'Standing pose');
+      expect(await ComparisonLabelStore.load('/b.csv'), 'Bending pose');
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   for (final size in [
     const Size(390, 844),
     const Size(844, 390),
@@ -71,19 +130,27 @@ void main() {
         MaterialApp(
           theme: qaTheme(),
           home: ComparisonScreen(
-            first: ReportSession('A', 'a.csv', base),
-            second: ReportSession('B', 'b.csv', base),
+            first: ReportSession(
+              'Standing pose',
+              'StandingPose_ppg_data.csv',
+              base,
+            ),
+            second: ReportSession(
+              'Half-bending forward pose',
+              'HalfBendingForwardPose_ppg_data.csv',
+              base,
+            ),
           ),
         ),
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.scrollUntilVisible(
-        find.text('Compare selected regions'),
+        find.text('Recalculate regions'),
         250,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('Compare selected regions'), findsOneWidget);
+      expect(find.text('Recalculate regions'), findsOneWidget);
       await snapshot(tester, 'comparison-${size.width.toInt()}');
       await tester.pumpWidget(
         MaterialApp(

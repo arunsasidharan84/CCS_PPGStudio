@@ -356,6 +356,7 @@ class _HomeScreenState extends State<HomeScreen>
         ? 'Recording'
         : File(_selectedPpgPath!).uri.pathSegments.last,
     _analysisResult!,
+    sourcePath: _selectedPpgPath,
     reviewNotes: _reviewEdits
         .map(
           (e) =>

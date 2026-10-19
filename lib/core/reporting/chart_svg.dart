@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import '../models/ppg_models.dart';
+import 'comparison_presentation.dart';
 
 String xmlText(String value) => value
     .replaceAll('&', '&amp;')
@@ -25,6 +26,129 @@ class PoincareGeometry {
 }
 
 class ChartSvg {
+  /// Both conditions share a per-metric zero-based axis, including negative values.
+  static String pairedMetric(
+    ComparisonMetric metric,
+    SessionAnalysisResult a,
+    SessionAnalysisResult b, {
+    bool dark = false,
+  }) {
+    final av = metric.value(a), bv = metric.value(b);
+    final values = [av, bv].whereType<double>().toList();
+    final low = math.min(0.0, values.isEmpty ? 0.0 : values.reduce(math.min));
+    final high = math.max(0.0, values.isEmpty ? 1.0 : values.reduce(math.max));
+    final span = high == low ? 1.0 : high - low;
+    double x(double v) => 18 + (v - low) / span * 174;
+    final ink = dark ? '#e2e8f0' : '#152B42';
+    final muted = dark ? '#94a3b8' : '#586879';
+    final out = StringBuffer(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="260" height="68" viewBox="0 0 260 68">',
+    );
+    out.write(
+      '<path d="M ${x(0)} 3 V 52" stroke="$muted" stroke-width="0.6"/>',
+    );
+    for (var i = 0; i < 2; i++) {
+      final value = i == 0 ? av : bv;
+      final color = dark
+          ? (i == 0 ? '#27C5C8' : '#B69AF6')
+          : (i == 0
+                ? ComparisonPresentation.colorA
+                : ComparisonPresentation.colorB);
+      final y = 7 + i * 25;
+      out.write(
+        '<text x="1" y="${y + 11}" font-family="Helvetica" font-size="9" fill="$color">${i == 0 ? 'A' : 'B'}</text>',
+      );
+      if (value != null) {
+        out.write(
+          '<rect x="${math.min(x(0), x(value))}" y="$y" width="${(x(value) - x(0)).abs()}" height="15" rx="2" fill="$color"/>',
+        );
+      }
+      out.write(
+        '<text x="204" y="${y + 12}" font-family="Helvetica" font-size="12" fill="$ink">${ComparisonMetric.number(value)}</text>',
+      );
+    }
+    out.write(
+      '<text x="18" y="65" font-family="Helvetica" font-size="9" fill="$muted">${xmlText(metric.change(a, b))}</text></svg>',
+    );
+    return out.toString();
+  }
+
+  static String poincareCompact(
+    PoincareData data,
+    PoincareGeometry bounds,
+    String title,
+    String color,
+  ) {
+    final s = StringBuffer(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="260" height="150" viewBox="0 0 260 150">',
+    );
+    double x(double v) =>
+        12 + (v - bounds.low) / (bounds.high - bounds.low) * 110;
+    double y(double v) =>
+        134 - (v - bounds.low) / (bounds.high - bounds.low) * 110;
+    void text(
+      double x,
+      double y,
+      String value, {
+      int size = 9,
+      String ink = '#526478',
+    }) => s.write(
+      '<text x="$x" y="$y" font-family="Helvetica" font-size="$size" fill="$ink">${xmlText(value)}</text>',
+    );
+    text(12, 13, title, size: 11, ink: color);
+    s.write(
+      '<rect x="12" y="24" width="110" height="110" fill="#f7fafc" stroke="#d6dee8"/><path d="M12 134 L122 24" stroke="#cbd5e1" stroke-width=".6"/>',
+    );
+    final n = math.min(data.x.length, data.y.length);
+    final step = math.max(1, (n / 600).ceil());
+    for (var i = 0; i < n; i += step) {
+      if (data.x[i].isFinite && data.y[i].isFinite) {
+        s.write(
+          '<circle cx="${x(data.x[i])}" cy="${y(data.y[i])}" r=".8" fill="$color" fill-opacity=".55"/>',
+        );
+      }
+    }
+    if (n >= 3) {
+      final path = StringBuffer();
+      for (var i = 0; i <= 64; i++) {
+        final t = i * 2 * math.pi / 64,
+            long = data.sd2 * math.cos(t) / math.sqrt2,
+            short = data.sd1 * math.sin(t) / math.sqrt2;
+        path.write(
+          '${i == 0 ? 'M' : 'L'} ${x(data.meanRr + long - short)} ${y(data.meanRr + long + short)} ',
+        );
+      }
+      s.write(
+        '<path d="${path}Z" fill="none" stroke="$color" stroke-width="1"/>',
+      );
+      text(136, 48, 'Pooled interval geometry', size: 8);
+      text(
+        136,
+        68,
+        'SD1  ${data.sd1.toStringAsFixed(1)} ms',
+        size: 10,
+        ink: color,
+      );
+      text(
+        136,
+        88,
+        'SD2  ${data.sd2.toStringAsFixed(1)} ms',
+        size: 10,
+        ink: color,
+      );
+    } else {
+      text(136, 65, 'Insufficient pairs', size: 10);
+    }
+    text(136, 110, '$n adjacent pairs', size: 9);
+    text(
+      12,
+      147,
+      'Both axes: ${bounds.low.toStringAsFixed(0)} - ${bounds.high.toStringAsFixed(0)} ms',
+      size: 8,
+    );
+    return '$s</svg>';
+  }
+
   static String poincare(
     PoincareData data, {
     bool dark = false,
